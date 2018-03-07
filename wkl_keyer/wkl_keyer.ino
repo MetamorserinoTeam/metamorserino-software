@@ -1,6 +1,6 @@
 
- #define metaVERSION "4.3"
- const byte MorserSignature = '?';   // same as 4.2;  3.2 was '$', 4.0 was '@', 4.1 was '+'
+ #define metaVERSION "4.4"
+ const byte MorserSignature = '*';   // 4.2 and 4.3 had '?';  3.2 was '$', 4.0 was '@', 4.1 was '+'
 
  
 /**********************************************************************************************************************************
@@ -76,8 +76,10 @@
 // We use address 0x3F
 // Set the pins on the I2C chip used for LCD connections:
 //                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
-LiquidCrystal_I2C lcd(0x3F, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
+//LiquidCrystal_I2C lcd(0x5f, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I2C address
+LiquidCrystal_I2C lcd(0x5f);  // Set the LCD I2C address
 
+// this is a placeholder - the real address is determined now in setup() !!! can be 0x27 or 0x3f
 
 /// globald constants and variables
 ///
@@ -188,10 +190,11 @@ struct CWs {
   int tRight;                   // threshold for right paddle
   boolean useExtPaddle;         // true if we use an external (mechanical) paddle instead of the touch sensors
   boolean ACS;                  // true if we use Automatic Character Spacing
+  byte i2cAddress;              // result of i2c scanner
 };
 
 struct CWs CWsettings = {
-  15, 650, 5, false, 0, 4, 2, 110, 110, false, false };
+  15, 650, 5, false, 0, 4, 2, 110, 110, false, false, 0x3F };
 
 boolean settingsDirty = false;    // we use this to see if anything in CW settings has changed, so we need to write settings into EEPROM
 
@@ -803,9 +806,54 @@ boolean filteredStateBefore = false;
 ///////////////////////////////////////////////////////////////////////////
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);          // only for debugging purposes! comment out for production code!
+
+byte i2cAddress;
+
+Serial.begin(9600);          // only for debugging purposes! comment out for production code!
+
+// read what is stored in EEPROM:
+//   signature  byte (to see if we actually have values we can meaningfully read - otherwise we use the defaults
+//   CWsettings struct CWs CWsettings (speed, polarity,  mode etc) - 
+
+// calculate addresses
+  addressSignature    = EEPROM.getAddress(sizeof(eSignature));
+  addressCWsettings   = EEPROM.getAddress(sizeof(CWsettings));
+
+  // check signature
+  eSignature = EEPROM.readByte(addressSignature);
+  if (eSignature == MorserSignature) {                    // OK, we read in values from EEPROM
+    EEPROM.readBlock(addressCWsettings, CWsettings);      // otherwise we use the defaults defined in this program
+  }
+    // first use of device with this version: use defaults, run i2c scanner, write results into EEPROM
+  Wire.begin();
+  i2cAddress = i2cScan();
+  if (CWsettings.i2cAddress != i2cAddress) {
+    CWsettings.i2cAddress = i2cAddress;
+    saveConfig();
+  }
+ 
+
+// we reset the LCD address for a 16 chars 2 line display
+// Set the pins on the I2C chip used for LCD connections:
+//                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
+  lcd = LiquidCrystal_I2C( CWsettings.i2cAddress, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+  
+  // set up the LCD's number of rows and columns:   
+  lcd.begin(16, 2);           // initialize display (no of cols and rows)
+  
+  
+  // create 7 glyphs for volume display
+  lcd.createChar(1, volGlyph[0]);
+  lcd.createChar(2, volGlyph[1]);
+  lcd.createChar(3, volGlyph[2]);
+  lcd.createChar(4, volGlyph[3]);
+  lcd.createChar(5, volGlyph[4]);
+  lcd.createChar(6, volGlyph[5]);
+  lcd.createChar(7, volGlyph[6]);
+ 
+  
   pinMode(keyerPin, OUTPUT);        // we can use the built-in LED to show when the transmitter is being keyed
+
   digitalWrite(keyerPin, LOW);
   pinMode(straightPin, INPUT_PULLUP);
   pinMode(leftPin, INPUT_PULLUP);   // the touch library does this itself - we just do it here in case we use the eternal paddles
@@ -829,34 +877,6 @@ void setup() {
   modeButton.multiclickTime = 275;  // Time limit for multi clicks
   modeButton.longClickTime  = 400; // time until "held-down clicks" register
 
-
-  // set up the LCD's number of rows and columns:   
-  lcd.begin(16, 2);           // initialize display (no of cols and rows)
-  
-  
-  // create 7 glyphs for volume display
-  lcd.createChar(1, volGlyph[0]);
-  lcd.createChar(2, volGlyph[1]);
-  lcd.createChar(3, volGlyph[2]);
-  lcd.createChar(4, volGlyph[3]);
-  lcd.createChar(5, volGlyph[4]);
-  lcd.createChar(6, volGlyph[5]);
-  lcd.createChar(7, volGlyph[6]);
- 
- 
-// read what is stored in EEPROM:
-//   signature  byte (to see if we actually have values we can meaningfully read - otherwise we use the defaults
-//   CWsettings struct CWs CWsettings (speed, polarity,  mode etc) - 
-
-// calculate addresses
-  addressSignature    = EEPROM.getAddress(sizeof(eSignature));
-  addressCWsettings   = EEPROM.getAddress(sizeof(CWsettings));
-
-  // check signature
-  eSignature = EEPROM.readByte(addressSignature);
-  if (eSignature == MorserSignature) {                    // OK, we read in values from EEPROM
-    EEPROM.readBlock(addressCWsettings, CWsettings);      // otherwise we use the defaults defined in this program
-  }
 
   
   // calibrate the paddles
@@ -1142,6 +1162,7 @@ void setFarnworthMode() {
 
 void setPolarityMode() {
   CWsettings.didah = !(CWsettings.didah);
+  
    encoderPos = 0;                                     // reset the encoder
    displayPolarity();
    settingsDirty = true;
@@ -1283,6 +1304,9 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
             break;
             
     case DAH:
+    /// first we check that we have waited as defined by ACS settings
+            if (CWsettings.ACS && (millis() <= acsTimer))  // if we do automatic character spacing, and haven't waited for 3 dits...
+                  break;
             clear_PaddleLatches();        // clear the paddle latches
             keyerControl &= ~(DIT_LAST);                      // clear dit latch  - we are not processing a DIT
             
@@ -1367,7 +1391,7 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
                                if (charCounter == 12) {
                                   saveConfig();
                                }
-                               acsTimer = millis() + ACS_LENGTH + ditLength; // prime the ACS timer
+                               acsTimer = millis() + (ACS_LENGTH * ditLength); // prime the ACS timer
                                interWordTimer = millis() + 6*ditLength;  // prime the timer to detect a space between characters
                                                                          // nominally 7 dit-lengths, but we are not quite so strict here
                                keyerControl = 0;                      // clear all latches completely before we go to IDLE
@@ -2175,5 +2199,26 @@ void recalculateDah(unsigned long duration) {       /// recalculate the average 
     //Serial.println(dahAvg);
 }
 
+byte i2cScan() {                                     // run a scanner to find out I2C address of LCD display - no other i2c devices should be active during scan!
+  byte address, error;                               // we just check for 0x27 - if this is the wrong address, we assume it has to be 0x3f,
+                                                     // as these are the two addresses, depending on the chip being used (either 8574T or 8574AT)
 
+
+  //delay(2000);
+  for (address = 20; address < 96; address++ ) {
+    // The i2c_scanner uses the return value of
+    // the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+ 
+    if (error == 0) {
+      //Serial.print("Device found on address (decimal): ");
+      //Serial.println(address);
+      return address;
+    }
+   
+  }
+  return 39;
+}
 
