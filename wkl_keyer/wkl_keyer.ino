@@ -1,6 +1,6 @@
 
- #define metaVERSION "4.2"
- const byte MorserSignature = '?';   // 3.2 was '$', 4.0 was '@', 4.1 was '+'
+ #define metaVERSION "4.3"
+ const byte MorserSignature = '?';   // same as 4.2;  3.2 was '$', 4.0 was '@', 4.1 was '+'
 
  
 /**********************************************************************************************************************************
@@ -1164,7 +1164,7 @@ void updateGeneratorMode() {
   if (CWsettings.generatorMode < 9) {
     generatorMode = GROUPOF5;
     startPool = bounds[CWsettings.generatorMode][0];
-    endPool = bounds[CWsettings.generatorMode][1];
+    endPool = bounds[CWsettings.generatorMode][1] +1;
     }
   else if (CWsettings.generatorMode == 9)
     generatorMode = CALLSIGNS;
