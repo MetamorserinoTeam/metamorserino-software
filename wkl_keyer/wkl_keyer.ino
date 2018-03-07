@@ -1,4 +1,8 @@
 
+ #define metaVERSION "4.2"
+ const byte MorserSignature = '?';   // 3.2 was '$', 4.0 was '@', 4.1 was '+'
+
+ 
 /**********************************************************************************************************************************
  * Copyright 2017, Willi Kraml (OE1WKL) 
  * 
@@ -30,14 +34,19 @@
   *  Dazu musst du die '//' (Beginn einer Kommentarzeile) bei einer der folgenden Zeilen entfernen! (Bei dem Typ, der verwendet wird)
   */
 
-//#define KY_040_ENCODER
+#define KY_040_ENCODER
 //#define STANDARD_ENCODER
 
 /* the next line is a factor determining the sensitivity of the paddles */
 /* lower value: higher sensitivity; range should be within 0.90 and 0.99 */
 
  #define SENS_FACTOR 0.96
-  
+
+ /// we define auto-character spacing in the next line...
+ /// ACS_LENGTH normally should be 3, if less strict then 2 
+ 
+ #define ACS_LENGTH 3
+
 ////// code by others used in this sketch:
 /*
  *  NewliquidCrystal for LCD/I2C/TWI display - see https://bitbucket.org/fmalpartida/new-liquidcrystal/wiki/Home
@@ -80,6 +89,7 @@ const int sidetonePin = 9;      // to generate an ugly keyer side tone
 const int modeButtonPin = 4;    // input pin for mode button
 const int keyerPin = 13;        // this keys the transmitter /through a 2N2222 NPN transistor - at the same time lights up the LED on the Arduino
 const int straightPin = 12;     // input for straight key - for Morse decoder
+const int audioInPin = A6;      // audio in for Morse decoder
 
 // set up the button
 ClickButton modeButton(modeButtonPin, LOW, CLICKBTN_PULLUP);  // initialize mode button
@@ -129,19 +139,13 @@ encoderMode encoderState = speedSettingMode;    // we start with adjusting the s
 
 /// the states the morserino can be in - top level menu
 enum morserinoMode {morseKeyer, morseTrainer, morseDecoder, invalid };
-morserinoMode morseState = invalid;
+morserinoMode morseState = morseKeyer;
 
 
 // display buffers for bottom display line
 char scroll_line[17] = "                "; // a string of 16 blanks, automatically terminates with a zero byte in 17th position
 char scroll_memory[17];
 
-
-//  keyerControl bit definitions
-
-#define     DIT_L      0x01     // Dit latch
-#define     DAH_L      0x02     // Dah latch
-#define     DIT_LAST   0x04     // Dit was last processed element
 
 
 // defines for keyer modi
@@ -158,7 +162,6 @@ int addressSignature ;
 int addressCWsettings  ;
 
 // the following is only used to initially see if we have something stored in EEPROM
-const byte MorserSignature = '+';   // 3.2 was '$', 4.0 was '@'
 byte eSignature;
 
 ///// GROUPOF5
@@ -184,14 +187,22 @@ struct CWs {
   int tLeft;                    // threshold for left paddle
   int tRight;                   // threshold for right paddle
   boolean useExtPaddle;         // true if we use an external (mechanical) paddle instead of the touch sensors
+  boolean ACS;                  // true if we use Automatic Character Spacing
 };
 
 struct CWs CWsettings = {
-  15, 650, 5, false, 0, 4, 2, 110, 110, false };
+  15, 650, 5, false, 0, 4, 2, 110, 110, false, false };
 
 boolean settingsDirty = false;    // we use this to see if anything in CW settings has changed, so we need to write settings into EEPROM
 
 int realVolume[] = {0, 64, 160, 270, 400, 650, 800, 1023};
+
+
+//  keyerControl bit definitions
+
+#define     DIT_L      0x01     // Dit latch
+#define     DAH_L      0x02     // Dah latch
+#define     DIT_LAST   0x04     // Dit was last processed element
 
 //  Global Keyer Variables
 //
@@ -296,6 +307,7 @@ byte treeptr = 0;                          // pointer used to navigate within th
 char morseCharacter[5];                // result of decoding
 
 unsigned long interWordTimer = 0;      // timer to detect interword spaces
+unsigned long acsTimer = 0;            // timer to use for automatic character spacing (ACS)
 
 boolean trainerMode = false;
 long int seed;
@@ -314,6 +326,7 @@ boolean startAgain = false;       // to indicate that we are starting a new sequ
 byte atStart[] = {25, 25, 25, 50, 53, 53};
 byte k = 0;        /// pointer for atStart
 boolean active = false;                          // flag for trainer mode
+boolean keyTrainerMode = false;
 
 
 //// special characters are: ch, <as>, <ka>, <kn>, <sk>
@@ -719,7 +732,7 @@ byte volGlyph[][8] = {
 /// variables for morse decoder
 ///////////////////////////////
 
-const int audioInPin = A6;
+/// const int audioInPin = A6; already defined above
 
 boolean keyTx = false;             // when state is set by manual key or touch paddle, then true!
                                    // we use this to decide if Tx should be keyed or not
@@ -813,8 +826,8 @@ void setup() {
   // Setup button timers (all in milliseconds / ms)
   // (These are default if not set, but changeable for convenience)
   modeButton.debounceTime   = 12;   // Debounce timer in ms
-  modeButton.multiclickTime = 170;  // Time limit for multi clicks
-  modeButton.longClickTime  = 310; // time until "held-down clicks" register
+  modeButton.multiclickTime = 275;  // Time limit for multi clicks
+  modeButton.longClickTime  = 400; // time until "held-down clicks" register
 
 
   // set up the LCD's number of rows and columns:   
@@ -861,7 +874,19 @@ void setup() {
       saveConfig();
     }
   } else {                                              // touch configured, check for calibration and for external paddle
-    if (refLeft > 630 && refRight > 630) {             // we use touch sensors and detect touch sensor squeeze at start-up
+                                                        // check for external paddles connected; 
+                                                        // you need to close at least one of the contacts for that purpose at start-up
+    pinMode(leftPin, INPUT_PULLUP);pinMode(rightPin, INPUT_PULLUP);
+    if ((analogRead(leftPin) < 50) || (analogRead(rightPin) < 50)) {    // a mechanical paddle is pressed, so switch to use them
+      CWsettings.useExtPaddle = true;
+      saveConfig();
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(F("Use Ext. Paddle"));
+      delay(1000);
+    } // end check for external paddle
+    
+      else if (refLeft > 630 && refRight > 630) {             // we use touch sensors and detect touch sensor squeeze at start-up: calibration
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print(F("Calibration"));
@@ -884,16 +909,7 @@ void setup() {
       delay(3000);
     } // end calibration mode
 
-    // check for external paddles connected; you need to close at least one of the contacts for that purpose at start-up
-    pinMode(leftPin, INPUT_PULLUP);pinMode(rightPin, INPUT_PULLUP);
-    if ((analogRead(leftPin) < 50) || (analogRead(rightPin) < 50)) {    // a mechanical paddle is pressed, so switch to use them
-      CWsettings.useExtPaddle = true;
-      saveConfig();
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print(F("Use Ext. Paddle"));
-      delay(1000);
-    } // end check for external paddle
+
   }
   
     
@@ -902,7 +918,7 @@ void setup() {
   lcd.setCursor(0,0);
   lcd.print(F("MetaMorserino"));
   lcd.setCursor(0,1);
-  lcd.print(F("V 4.1 (oe1wkl)"));
+  lcd.print(F("V " metaVERSION "  (oe1wkl)"));
   delay(1200);
   lcd.clear();
 
@@ -1049,6 +1065,9 @@ void loop() {
     
 /// and we have time to check the encoder
      if (TurnDetected) {
+             vol.tone(sidetonePin, 250, realVolume[CWsettings.sidetoneVolume]);
+             delay(8);
+             vol.noTone();
              encoderPos = (up ? 1 : -1);
              TurnDetected = false;
          }
@@ -1222,7 +1241,7 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
          // display the interword space, if necessary
          if (millis() > interWordTimer) {
              to_scroll(' ');
-             interWordTimer = 4294967000;  // almost the biggest possible unsignend long number :-) - do not output extra spaces!
+             interWordTimer = 4294967000;  // almost the biggest possible unsigned long number :-) - do not output extra spaces!
          }
        // Was there a paddle press?
         if (dit || dah ) {
@@ -1242,6 +1261,9 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
         break;
 
     case DIT:
+    /// first we check that we have waited as defined by ACS settings
+            if (CWsettings.ACS && (millis() <= acsTimer))  // if we do automatic character spacing, and haven't waited for 3 dits...
+              break;
             clear_PaddleLatches();                           // always clear the paddle latches at beginning of new element
             keyerControl |= DIT_LAST;                        // remember that we process a DIT
 
@@ -1254,7 +1276,7 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
                              break;
               case IAMBICA:
               case ULTIMATIC:
-                             curtistimer = ditLength;        // no ealry paddle checking in Curtis mode A or Ultimatic mode
+                             curtistimer = ditLength;        // no early paddle checking in Curtis mode A or Ultimatic mode
                              break;
             }
             keyerState = KEY_START;                          // set next state of state machine
@@ -1345,8 +1367,9 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
                                if (charCounter == 12) {
                                   saveConfig();
                                }
- 
-                               interWordTimer = millis() + 5*ditLength;  // prime the timer to detect a space between characters
+                               acsTimer = millis() + ACS_LENGTH + ditLength; // prime the ACS timer
+                               interWordTimer = millis() + 6*ditLength;  // prime the timer to detect a space between characters
+                                                                         // nominally 7 dit-lengths, but we are not quite so strict here
                                keyerControl = 0;                      // clear all latches completely before we go to IDLE
                       break;
                 } // switch keyerControl : evaluation of flags
@@ -1569,7 +1592,8 @@ void generateCW () {          // we use a list of elements for that character, a
   switch (generatorState) {                        // CW generator state machine
     case KEY_DOWN:
             if (millis() > timer) {                // are we at end of key down ?
-                 vol.noTone();                     // stop side tone 
+                 vol.noTone();                     // stop side tone
+                 digitalWrite(keyerPin, LOW);      // if we key in trainer mode, or not....
                  ++pointer; 
                  if (pointer < NoE)               // we need to output another element for this character
                     timer = millis() + ditLength;  // pause is inter element (= 1 dit = ditLength)
@@ -1590,6 +1614,8 @@ void generateCW () {          // we use a list of elements for that character, a
     case KEY_UP:
             if (millis() > timer) {                // at end of the pause
                 vol.tone( sidetonePin, CWsettings.sidetoneFreq, realVolume[CWsettings.sidetoneVolume] );    // start generating side tone  
+                if (keyTrainerMode) 
+                  digitalWrite(keyerPin, HIGH);           // turn the LED on, key transmitter, or whatever
                 timer = millis() + (nextElement[pointer] ? dahLength : ditLength);                          // start a dit or a dah and set timer accordingly
                 generatorState = KEY_DOWN;         // next state
                 }
@@ -1805,30 +1831,40 @@ char generateAbbrev(boolean next) {     // randomly fetch q-groups and abbreviat
 ////////////////////////
 
 void topMenu() {                            // display top-menu and wait for selection
-  const byte topLevels = 3;          // change this ti 3 one we have implemented morse decoder!
+  const byte topLevels = 3;          
   int newMode = (int)morseState;
 
   vol.noTone();                     // stop side tone  - just in case
   digitalWrite(keyerPin, LOW);           // turn the LED off, unkey transmitter, or whatever; just in case....
 
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print(F("Select Mode:"));
-  lcd.setCursor(0,1);
-            switch ((morserinoMode)newMode) {
-                  case invalid:    newMode = 0;
-                  case morseKeyer: lcd.print(F("1 - CW Keyer  "));
-                                   break;
-                  case morseTrainer:
-                                   lcd.print(F("2 - CW Trainer"));
-                                   break;
-                  case morseDecoder:
-                                   lcd.print(F("3 - CW Decoder"));
-                                   break;
-           }
+ displayTopMenu(newMode);
   while (true) {
         modeButton.Update();
         if (modeButton.clicks) {
+          if (modeButton.clicks == 2) {            // a double click in top menu means we toggle keyer output on/off
+            keyTrainerMode = !keyTrainerMode;
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.print(F("Key CW Trainer:"));
+            lcd.setCursor(0,1);
+            lcd.print( keyTrainerMode ? "On" : "Off" );
+            delay(1500);
+            displayTopMenu(newMode);
+            modeButton.Update();
+            }
+          else if (modeButton.clicks == 3) {            // a triple click in top menu means we toggle ACS on/off
+            CWsettings.ACS = !CWsettings.ACS;
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.print(F("Auto Char Space:"));
+            lcd.setCursor(0,1);
+            lcd.print( CWsettings.ACS ? "On" : "Off" );
+            saveConfig();
+            delay(1500);
+            displayTopMenu(newMode);
+            modeButton.Update();
+            }
+          else {
           if (newMode != morseState)
               morseState = (morserinoMode)newMode;
 
@@ -1841,9 +1877,13 @@ void topMenu() {                            // display top-menu and wait for sel
                                 break;   
           }
           return;       // we got a click, and do the rest only otherwise
+        }
         } 
           
         if (TurnDetected) {
+             vol.tone(sidetonePin, 250, realVolume[CWsettings.sidetoneVolume]);
+             delay(8);
+             vol.noTone();
              encoderPos = (up ? 1 : -1);
              TurnDetected = false;
          }
@@ -1866,11 +1906,30 @@ void topMenu() {                            // display top-menu and wait for sel
   } // end while - we leave as soon as the button has been pressed
 } // end function topMenu
 
+void displayTopMenu( int mode) {
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(F("Select Mode:"));
+  lcd.setCursor(0,1);
+            switch (mode) {
+                  //case invalid:    newMode = 0;
+                  case 0: lcd.print(F("1 - CW Keyer  "));
+                                   break;
+                  case 1:
+                                   lcd.print(F("2 - CW Trainer"));
+                                   break;
+                  case 2:
+                                   lcd.print(F("3 - CW Decoder"));
+                                   break;
+           }
+}
+
+
 // encoder subroutines
 /// interrupt service routine
 
 void isr ()  {                    // Interrupt service routine is executed when a HIGH to LOW transition is detected on CLK
- if ( micros() < (rotating + 9500) ) return;  
+ if ( micros() < (rotating + 11500) ) return;  
  if (digitalRead(PinCLK))
    up = digitalRead(PinDT);
  else
