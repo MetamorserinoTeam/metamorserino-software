@@ -27,7 +27,7 @@
  *                                            -> http://thijs.elenbaas.net/2012/07/extended-eeprom-library-for-arduino/
  *  For volume control of NF output: Volume3 by Connor Nishijima, see https://github.com/connornishijima/arduino-volume3 and
  *                                             https://hackaday.io/project/11957-10-bit-component-less-volume-control-for-arduino
- *  
+ *  Routines for morse decoder - to a certain degree based on code by Hjalmar Skovholm Hansen OZ1JHM - see http://skovholm.com/cwdecoder
  */
 
 // include the library code:
@@ -597,7 +597,7 @@ void setup() {
   lcd.setCursor(0,0);
   lcd.print(F("MetaMorserino"));
   lcd.setCursor(0,1);
-  lcd.print(F("V 3.1 (oe1wkl)"));
+  lcd.print(F("V 3.2 (oe1wkl)"));
   delay(1200);
   lcd.clear();
 
@@ -1530,7 +1530,7 @@ void topMenu() {                            // display top-menu and wait for sel
 /// interrupt service routine
 
 void isr ()  {                    // Interrupt service routine is executed when a HIGH to LOW transition is detected on CLK
- if ( micros() < (rotating + 3300) ) return;  
+ if ( micros() < (rotating + 4500) ) return;  
  if (digitalRead(PinCLK))
    up = digitalRead(PinDT);
  else
@@ -1549,7 +1549,7 @@ void saveConfig () {
 }
 
 ////////////////////////////
-///// Routines for morse decoder - heavily based on code by Hjalmar Skovholm Hansen OZ1JHM - copyleft licence
+///// Routines for morse decoder - to a certain degree based on code by Hjalmar Skovholm Hansen OZ1JHM - copyleft licence
 ///////////////////////////
 
 void setupGoertzel () {                 /// pre-compute some values that are compute-imntensive and won't change anyway
@@ -1640,94 +1640,7 @@ boolean checkTone() {                 /// check if we have a tone signal at A6 w
  }
 }   /// end checkTone()
 
-/*
-void getDurations() {                 
-  ////////////////////////////////////////////////////////////
-  // We do want to have some durations on high and low //
-  ////////////////////////////////////////////////////////////
 
-    if (filteredState == true) {
-      StartTimeHigh = millis();
-      lowduration = (millis() - startTimeLow);
-    } else {
-      startTimeLow = millis();
-      highduration = (millis() - StartTimeHigh);
-      if (highduration < (2 * hightimesavg) || hightimesavg == 0) {
-        hightimesavg = (highduration + hightimesavg + hightimesavg) / 3; // now we know avg dit time ( rolling 3 avg)
-      }
-      if (highduration > (5 * hightimesavg) ) {
-        hightimesavg = highduration + hightimesavg;   // if speed decrease fast ..
-      }
-    }
-  //    Serial.print("hightimesavg; ");
-  //Serial.println(hightimesavg);
-
-}   /// end getDurations()
-
-void checkDitDah() {
-  ///////////////////////////////////////////////////////////////
-  // now we will check which kind of baud we have - dit or dah //
-  // and what kind of pause we do have 1 - 3 or 7 pause        //
-  // we think that hightimeavg = 1 bit                         //
-  ///////////////////////////////////////////////////////////////
-    int wpm;
-    stop = false;
-    if (filteredState == false) { //// we did end a HIGH
-       vol.noTone();                     // stop side tone
-       if (highduration < (hightimesavg * 2) && highduration > (hightimesavg * 0.6)) { /// we got a dit -  0.6 filter out false dits
-            treeptr = CWtree[treeptr].dit;
-            //Serial.print(".");
-        }
-      if (highduration > (hightimesavg * 2) && highduration < (hightimesavg * 6)) {   /// we got a dah
-            treeptr = CWtree[treeptr].dah;
-            //Serial.print("-");
-            wpm = (CWsettings.wpm + (3600 / highduration)) / 2; //// 
-            if (CWsettings.wpm != wpm) {
-              CWsettings.wpm = wpm;
-              speedChanged = true;
-            }
-      }
-    } else { //// we did end a LOW
-      vol.tone( sidetonePin, 744, realVolume[CWsettings.sidetoneVolume] );    // start generating side tone
-      float lacktime = 1;                 ///  when high speeds we have to have a little more pause before new letter or new word
-      if (CWsettings.wpm > 30)lacktime = 1.2;
-      if (CWsettings.wpm > 35)lacktime = 1.5;
-
-      if (lowduration > (hightimesavg * 2 * lacktime)) { // letter space or word space
-        displayMorse();
-        //Serial.print("/");
-      }
-      if (lowduration >= (hightimesavg * 5 * lacktime)) { // word space
-        to_scroll(' ');
-        treeptr = 0;
-        //Serial.println();
-      }
-    }
-}
-*/
-
-/*** optimized decoder ***/
-/* new state machine with 4 states: INTERELEMENT_, INTERCHAR_, LOW_, HIGH_ and tow functions: OFF_, ON_
- * /// not really a state, just some activity: OFF()          : // at change from high to low (falling flank of signal)
- *                  start off timer
- *                  evaluate length of high state, decode dit or dah, recalculate average dit or dah time
- *           ( next: INTERELEMENT_)
- *  INTERELEMENT_ : if (change) : ON_(), next: HIGH_
- *                  if off time >> interelement time: decode(), next: INTERCHAR_
- *                  break
- *  INTERCHAR_    : if (change): ON_(), next HIGH_
- *                  if off time > intercharacter time: decode(" "), next: LOW
- *                  break
- *  LOW_          : // waiting after interchar has elapsed
- *                  if (change) : ON_(), next HIGH_
- * /// not really a STATE, just some activity ON():          : // at change from low to high (rising flank of signal)
- *                  start on timer
- *                  evaluate length of low state; if comparable to dit length, recalculate average
- *                  (next: HIGH_)
- *  HIGH_:        : /// wait for end of high...
- *                  if (change) OFF(), next: INTERELEMENT_
- *  
- */
 void doDecode() {
   float lacktime;
   int wpm;
