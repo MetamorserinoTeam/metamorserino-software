@@ -14,7 +14,7 @@
  * IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *********************************************************************************************************************************/
-
+/// To DO: maybe configure bandwidth (number of samples)
 ////// code used:
 /*
  *  NewliquidCrystal for LCD/I2C/TWI display - see https://bitbucket.org/fmalpartida/new-liquidcrystal/wiki/Home
@@ -56,6 +56,7 @@ const int rightPin = A0;         // and right one to Pin 9
 const int sidetonePin = 9;      // to generate an ugly keyer side tone
 const int modeButtonPin = 4;    // input pin for mode button
 const int keyerPin = 13;        // this keys the transmitter /through a 2N2222 NPN transistor - at the same time lights up the LED on the Arduino
+const int straightPin = 12;     // input for straight key - for Morse decoder
 
 // set up the button
 ClickButton modeButton(modeButtonPin, LOW, CLICKBTN_PULLUP);  // initialize mode button
@@ -119,6 +120,7 @@ char scroll_memory[17];
 #define     DAH_L      0x02     // Dah latch
 #define     DIT_LAST   0x04     // Dit was last processed element
 
+
 // defines for keyer modi
 //
 
@@ -148,7 +150,7 @@ const char groups[][7] = { " a    ", "  9   ", " a9   ", " a9?  ", "   ?<>", " a
 
 // structure to contain persistent CW settings, to be stored in EEPROM
 struct CWs {
-  int wpm;                      // keyer speed in wörtern pro minute
+  int wpm;                      // keyer speed in buchstaben pro minute
   unsigned sidetoneFreq;        // side tone frequency
   int sidetoneVolume;           // side tone volume
   boolean didah;                // paddle polarity
@@ -265,7 +267,7 @@ const struct linklist CWtree[64]  = {
   {165, 63, 63}     // 63 Default for all unidentified characters
 };
 
-byte treeptr;                          // pointer used to navigate within the linked list representing the dichotomic tree
+byte treeptr = 0;                          // pointer used to navigate within the linked list representing the dichotomic tree
 char morseCharacter[5];                // result of decoding
 
 unsigned long interWordTimer = 0;      // timer to detect interword spaces
@@ -273,7 +275,7 @@ unsigned long interWordTimer = 0;      // timer to detect interword spaces
 boolean trainerMode = false;
 long int seed;
 
-/////// variables for morde code trainer mode
+/////// variables for morse code trainer mode
 
 byte NoE = 0;             // Number of Elements
 byte nextElement[8];      // the list of elements; 0 = dit, 1 = dah
@@ -441,6 +443,70 @@ byte volGlyph[][8] = {
   0b11000
 }};
 
+/// variables for morse decoder
+///////////////////////////////
+
+const int audioInPin = A6;
+
+float magnitude ;
+int magnitudelimit = 100;
+int magnitudelimit_low = 100;
+
+//boolean filteredState = false;
+//boolean filteredStateBefore = false;
+
+/// state machine for decoding CW
+enum DECODER_STATES  {LOW_, HIGH_, INTERELEMENT_, INTERCHAR_};
+DECODER_STATES decoderState = LOW_;
+
+
+///////////////////////////////////////////////////////////
+// The sampling frq will be 8928 on a 16 mhz             //
+// without any prescaler etc                             //
+// because we need the tone in the center of the bins    //
+// you can set the tone to 496, 558, 744 or 992          //
+// then n the number of samples which give the bandwidth //
+// can be (8928 / tone) * 1 or 2 or 3 or 4 etc           //
+// init is 8928/558 = 16 *4 = 64 samples                 //
+// try to take n = 96 or 128 ;o)                         //
+// 48 will give you a bandwidth around 186 hz            //
+// 64 will give you a bandwidth around 140 hz            //
+// 96 will give you a bandwidth around 94 hz             //
+// 128 will give you a bandwidth around 70 hz            //
+// BUT remember that high n take a lot of time           //
+// so you have to find the compromice - i use 48         //
+///////////////////////////////////////////////////////////
+
+float coeff;
+float Q1 = 0;
+float Q2 = 0;
+float sine;
+float cosine;
+const float sampling_freq = 8928.0;
+const float target_freq = 744.0; /// adjust for your needs see above
+const int n = 62; //// if you change  her please change next line also  ---- 64: BW = 140 Hz
+int testData[128];
+float bw;
+
+//////////////////////////////
+// Noise Blanker time which //
+// shall be computed?? so     //
+// this is initial          //
+//////////////////////////////
+const int nbtime = 6;  /// ms noise blanker
+
+unsigned long startTimeHigh;
+unsigned long highDuration;
+//long lasthighduration;
+//long hightimesavg;
+//long lowtimesavg;
+long startTimeLow;
+long lowDuration;
+boolean stop = false;
+boolean speedChanged = true;
+unsigned long ditAvg, dahAvg;     /// average values of dit and dah lengths to decode as dit or dah and to adapt to speed change
+boolean filteredState = false;
+boolean filteredStateBefore = false;
 
 
 /////////////////////////////////
@@ -452,6 +518,7 @@ void setup() {
   Serial.begin(9600);          // only for debugging purposes! comment out for production code!
   pinMode(keyerPin, OUTPUT);        // we can use the built-in LED to show when the transmitter is being keyed
   digitalWrite(keyerPin, LOW);
+  pinMode(straightPin, INPUT_PULLUP);
   
   // set up the encoder
   pinMode(PinCLK,INPUT);
@@ -500,43 +567,37 @@ void setup() {
     EEPROM.readBlock(addressCWsettings, CWsettings);
   }
   
-  // set up dit and dah length, as well as keyer initial state
-  ditLength = 1200 / CWsettings.wpm;                    // set new value for length of dits and dahs
-  dahLength = 3 * ditLength;
-  keyerState = IDLE_STATE;
-
  
-if (refLeft > 600 && refRight > 600) {                  // detect calibration mode at start-up
+  if (refLeft > 600 && refRight > 600) {                  // detect calibration mode at start-up
+      lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print(F("Calibration"));
+    CWsettings.tLeft = refLeft; CWsettings.tRight = refRight;
+    delay(1000);
+      lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print(F("Release paddles!"));
+      delay(1250);
+    refLeft = ADCTouch.read(leftPin, 1000);    //create reference values to
+    refRight = ADCTouch.read(rightPin, 1000);      //account for the capacitance of the pad
+    CWsettings.tLeft =  (int)((float)(CWsettings.tLeft - refLeft) * 0.8);
+    CWsettings.tRight = (int)((float)(CWsettings.tRight - refRight) * 0.8);
+    saveConfig();
+    
     lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print(F("Calibration"));
-  CWsettings.tLeft = refLeft; CWsettings.tRight = refRight;
-  delay(1000);
-    lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print(F("Release paddles!"));
-    delay(1250);
-  refLeft = ADCTouch.read(leftPin, 1000);    //create reference values to
-  refRight = ADCTouch.read(rightPin, 1000);      //account for the capacitance of the pad
-  CWsettings.tLeft =  (int)((float)(CWsettings.tLeft - refLeft) * 0.8);
-  CWsettings.tRight = (int)((float)(CWsettings.tRight - refRight) * 0.8);
-  saveConfig();
-  
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print(F("off: ")); lcd.print(refLeft); lcd.print(" "); lcd.print(refRight);
-   lcd.setCursor(0,1);
-  lcd.print(F("on+: ")); lcd.print(CWsettings.tLeft); lcd.print(" "); lcd.print(CWsettings.tRight);
-  delay(2000);
-} // end calibration mode
-  
+    lcd.setCursor(0,0);
+    lcd.print(F("off: ")); lcd.print(refLeft); lcd.print(" "); lcd.print(refRight);
+     lcd.setCursor(0,1);
+    lcd.print(F("on+: ")); lcd.print(CWsettings.tLeft); lcd.print(" "); lcd.print(CWsettings.tRight);
+    delay(2000);
+  } // end calibration mode
   
   // display startup screen 
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print(F("MetaMorserino"));
   lcd.setCursor(0,1);
-  lcd.print(F("V 2.3 (oe1wkl)"));
+  lcd.print(F("V 3.1 (oe1wkl)"));
   delay(1200);
   lcd.clear();
 
@@ -575,6 +636,11 @@ void setupTrainerMode() {
 
 void setupKeyerMode() {
   trainerMode = false;
+  // set up dit and dah length, as well as keyer initial state
+  ditLength = 1200 / CWsettings.wpm;                    // set new value for length of dits and dahs
+  dahLength = 3 * ditLength;
+  keyerState = IDLE_STATE;
+
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print(F("Start CW Keyer"));
@@ -589,14 +655,25 @@ void setupKeyerMode() {
 void setupDecoderMode() {
   /// here we will do the init for decoder mode
   trainerMode = false;
+  encoderState = volumeSettingMode;
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print(F("Start CW Decoder"));
-  lcd.setCursor(0,1);
-  lcd.print(F("not yet done!"));
+  ///lcd.setCursor(0,1);
+  ///lcd.print(F("not yet done!"));
  delay(1000);
   TurnDetected = false;
+  speedChanged = true;
   lcd.clear();
+  displayCWspeed (CWsettings.wpm);
+  displayVolume();
+    
+  /// set up variables for Goertzel Morse Decoder
+  setupGoertzel();
+  filteredState = filteredStateBefore = false;
+  decoderState = LOW_;
+  ditAvg = 60;
+  dahAvg = 180;
 }
 
 
@@ -623,22 +700,44 @@ void loop() {
                              generatorState = KEY_UP; 
                              startAgain = true;
                              fetchNextChar();
-                          }
-                          //Serial.println(active);
-                          //Serial.print("Mode: ");
-                          //Serial.println(CWsettings.generatorMode);
+                            }
                           }
                           if (active)
                             generateCW();
                           break;
-      case morseDecoder:  // nothing yet
+/*      case morseDecoder:  checkTone();                        // we listen for a tone on analog in
+                          if (filteredState != filteredStateBefore) {   // we detetced a change on input
+                              getDurations();                     // and measure durations
+                              checkDitDah();                      // and decode element, print letter if at end
+                          } 
+                          //////////////////////////////
+                          // write if no more letters //
+                          //////////////////////////////
+                          if ((millis() - startTimeLow) > (highduration * 6) && stop == false) {
+                            displayMorse();
+                            stop = true;
+                          }
+                          lasthighduration = highduration;
+                          filteredStateBefore = filteredState;
+                          if (speedChanged) {
+                            speedChanged = false;
+                            displayCWspeed (CWsettings.wpm);
+                          }
                           break;
+                          */
+      case morseDecoder: doDecode();
+                         if (speedChanged) {
+                            speedChanged = false;
+                            displayCWspeed (CWsettings.wpm);
+                          }
+                          break;
+                         
   } // end switch and code depending on state of metaMorserino
 
 /// if we have time check for button presses
 
     modeButton.Update();
-    if (morseState == morseDecoder && modeButton.clicks) {
+    if (morseState == morseDecoder && modeButton.clicks) {      // action during decoder mode!
         topMenu();
         return;
     }
@@ -995,6 +1094,8 @@ void togglePolarity () {
 
 /// displaying decoded morse code
 void displayMorse() {
+  if (treeptr == 0)
+    return;
   if (CWtree[treeptr].symb > (unsigned char) 32) {
   morseCharacter[0] = CWtree[treeptr].symb;
   morseCharacter[1] = (byte) 0;
@@ -1014,7 +1115,10 @@ void displayMorse() {
   default: strcpy (morseCharacter, "*");
     }
   // now display the string morseCharacter ....  
+  //Serial.println(treeptr);
+  //Serial.println(morseCharacter);
   scroll_display(morseCharacter);
+  treeptr = 0;                                    // reset tree pointer
 }
 
 
@@ -1044,10 +1148,12 @@ void scroll_display ( char string[]) {
 ////////// Display functions
 
 
-void clearTopLine () {
-    lcd.setCursor(0,0);
-    lcd.print((char)127); lcd.print((char)126);
-    lcd.print(F("              "));                   // two arrows + 14 blanks in top line
+void clearTopLine () {                                 // for config settings, clear line and display littel arrows, unless in decoder mode
+    if (morseState != morseDecoder) {
+      lcd.setCursor(0,0);
+      lcd.print((char)127); lcd.print((char)126);
+      lcd.print(F("              "));                   // two arrows + 14 blanks in top line
+    }
 }
 
 void displayTopLine() {
@@ -1250,16 +1356,8 @@ void fetchNextChar() {      // retrieve the next character to be output, and set
 
       }
     }
-    //Serial.print("NoE: ");
-    //Serial.println(NoE);
-    //Serial.print("Elements: ");
-    //for (int x = 0; x<NoE; ++x) {
-      //Serial.print(nextElement[x]);
-      //Serial.print(" ");
-    //}
-    //Serial.println();
     
-        /// now look up the character or string we need to output on the display
+    /// now look up the character or string we need to output on the display
     morseCharacter[1] = 0;         // this terminates the string for all single characters
 
     if ((character > 3) && (character < 30))
@@ -1362,8 +1460,12 @@ char generateCallsign(boolean next) {             // generate a new random strin
   return call[i++];
 }
 
+/////////////////////////
+//// TOP MENU
+////////////////////////
+
 void topMenu() {                            // display top-menu and wait for selection
-  const byte topLevels = 2;          // change this ti 3 one we have implemented morse decoder!
+  const byte topLevels = 3;          // change this ti 3 one we have implemented morse decoder!
   int newMode = (int)morseState;
 
   vol.noTone();                     // stop side tone  - just in case
@@ -1445,5 +1547,313 @@ void saveConfig () {
       EEPROM.updateBlock(addressCWsettings, CWsettings);  
       return;
 }
+
+////////////////////////////
+///// Routines for morse decoder - heavily based on code by Hjalmar Skovholm Hansen OZ1JHM - copyleft licence
+///////////////////////////
+
+void setupGoertzel () {                 /// pre-compute some values that are compute-imntensive and won't change anyway
+  bw = (sampling_freq / n);
+
+  int  k;
+  float omega;
+  k = (int) (0.5 + ((n * target_freq) / sampling_freq));
+  omega = (2.0 * PI * k) / n;
+  sine = sin(omega);
+  cosine = cos(omega);
+  coeff = 2.0 * cosine;
+}
+
+
+boolean checkTone() {                 /// check if we have a tone signal at A6 with Gortzel's algorithm, and apply some noise blanking as well
+                                   /// the result will be in globale variable filteredState
+  static boolean realstate = false;
+  static boolean realstatebefore = false;
+  static unsigned long lastStartTime = 0;
+
+  for (char index = 0; index < n; index++)
+      testData[index] = analogRead(audioInPin);
+  for (char index = 0; index < n; index++) {
+    float Q0;
+    Q0 = coeff * Q1 - Q2 + (float) testData[index];
+    Q2 = Q1;
+    Q1 = Q0;
+  }
+  float magnitudeSquared = (Q1 * Q1) + (Q2 * Q2) - Q1 * Q2 * coeff; // we do only need the real part //
+  magnitude = sqrt(magnitudeSquared);
+  Q2 = 0;
+  Q1 = 0;
+
+  //Serial.print(magnitude); Serial.println();  //// here you can measure magnitude for setup..
+
+  ///////////////////////////////////////////////////////////
+  // here we will try to set the magnitude limit automatic //
+  ///////////////////////////////////////////////////////////
+
+  if (magnitude > magnitudelimit_low) {
+    magnitudelimit = (magnitudelimit + ((magnitude - magnitudelimit) / 6)); /// moving average filter
+  }
+
+  if (magnitudelimit < magnitudelimit_low)
+    magnitudelimit = magnitudelimit_low;
+
+  ////////////////////////////////////
+  // now we check for the magnitude //
+  ////////////////////////////////////
+
+  if (magnitude > magnitudelimit * 0.6) // just to have some space up
+    realstate = true;
+  else
+    realstate = false;
+
+/*    this probably would need some de-bouncing, too? */
+  //////////////////////////////////////////////////////////////////////
+  // Modifications by PA2RDK                                  /////// //
+  // This code makes it possible to connect a key to an Arduino Pin.  //
+  if (!digitalRead(straightPin))
+    realstate = true;
+  /////////////////////////////////////////////////////////////
+
+  /////////////////////////////////////////////////////
+  // here we clean up the state with a noise blanker //
+  /////////////////////////////////////////////////////
+
+  if (realstate != realstatebefore)
+    lastStartTime = millis();
+  if ((millis() - lastStartTime) > nbtime) {
+    if (realstate != filteredState) {
+      filteredState = realstate;
+    }
+  }
+  realstatebefore = realstate;
+ if (realstate) {
+  //Serial.print("Realstate; ");
+  //Serial.println(realstate);
+  //Serial.print("Filteredstate; ");
+  //Serial.println(filteredState);
+ }
+ if (filteredState == filteredStateBefore)
+  return false;                                 // no change detected in filteredState
+ else {
+    filteredStateBefore = filteredState;
+    return true;
+ }
+}   /// end checkTone()
+
+/*
+void getDurations() {                 
+  ////////////////////////////////////////////////////////////
+  // We do want to have some durations on high and low //
+  ////////////////////////////////////////////////////////////
+
+    if (filteredState == true) {
+      StartTimeHigh = millis();
+      lowduration = (millis() - startTimeLow);
+    } else {
+      startTimeLow = millis();
+      highduration = (millis() - StartTimeHigh);
+      if (highduration < (2 * hightimesavg) || hightimesavg == 0) {
+        hightimesavg = (highduration + hightimesavg + hightimesavg) / 3; // now we know avg dit time ( rolling 3 avg)
+      }
+      if (highduration > (5 * hightimesavg) ) {
+        hightimesavg = highduration + hightimesavg;   // if speed decrease fast ..
+      }
+    }
+  //    Serial.print("hightimesavg; ");
+  //Serial.println(hightimesavg);
+
+}   /// end getDurations()
+
+void checkDitDah() {
+  ///////////////////////////////////////////////////////////////
+  // now we will check which kind of baud we have - dit or dah //
+  // and what kind of pause we do have 1 - 3 or 7 pause        //
+  // we think that hightimeavg = 1 bit                         //
+  ///////////////////////////////////////////////////////////////
+    int wpm;
+    stop = false;
+    if (filteredState == false) { //// we did end a HIGH
+       vol.noTone();                     // stop side tone
+       if (highduration < (hightimesavg * 2) && highduration > (hightimesavg * 0.6)) { /// we got a dit -  0.6 filter out false dits
+            treeptr = CWtree[treeptr].dit;
+            //Serial.print(".");
+        }
+      if (highduration > (hightimesavg * 2) && highduration < (hightimesavg * 6)) {   /// we got a dah
+            treeptr = CWtree[treeptr].dah;
+            //Serial.print("-");
+            wpm = (CWsettings.wpm + (3600 / highduration)) / 2; //// 
+            if (CWsettings.wpm != wpm) {
+              CWsettings.wpm = wpm;
+              speedChanged = true;
+            }
+      }
+    } else { //// we did end a LOW
+      vol.tone( sidetonePin, 744, realVolume[CWsettings.sidetoneVolume] );    // start generating side tone
+      float lacktime = 1;                 ///  when high speeds we have to have a little more pause before new letter or new word
+      if (CWsettings.wpm > 30)lacktime = 1.2;
+      if (CWsettings.wpm > 35)lacktime = 1.5;
+
+      if (lowduration > (hightimesavg * 2 * lacktime)) { // letter space or word space
+        displayMorse();
+        //Serial.print("/");
+      }
+      if (lowduration >= (hightimesavg * 5 * lacktime)) { // word space
+        to_scroll(' ');
+        treeptr = 0;
+        //Serial.println();
+      }
+    }
+}
+*/
+
+/*** optimized decoder ***/
+/* new state machine with 4 states: INTERELEMENT_, INTERCHAR_, LOW_, HIGH_ and tow functions: OFF_, ON_
+ * /// not really a state, just some activity: OFF()          : // at change from high to low (falling flank of signal)
+ *                  start off timer
+ *                  evaluate length of high state, decode dit or dah, recalculate average dit or dah time
+ *           ( next: INTERELEMENT_)
+ *  INTERELEMENT_ : if (change) : ON_(), next: HIGH_
+ *                  if off time >> interelement time: decode(), next: INTERCHAR_
+ *                  break
+ *  INTERCHAR_    : if (change): ON_(), next HIGH_
+ *                  if off time > intercharacter time: decode(" "), next: LOW
+ *                  break
+ *  LOW_          : // waiting after interchar has elapsed
+ *                  if (change) : ON_(), next HIGH_
+ * /// not really a STATE, just some activity ON():          : // at change from low to high (rising flank of signal)
+ *                  start on timer
+ *                  evaluate length of low state; if comparable to dit length, recalculate average
+ *                  (next: HIGH_)
+ *  HIGH_:        : /// wait for end of high...
+ *                  if (change) OFF(), next: INTERELEMENT_
+ *  
+ */
+void doDecode() {
+  float lacktime;
+  int wpm;
+
+    switch(decoderState) {
+      case INTERELEMENT_: if (checkTone()) {
+                              ON_();
+                              decoderState = HIGH_;
+                          } else {
+                              lowDuration = millis() - startTimeLow;             // we record the length of the pause
+                              lacktime = 3.0;                 ///  when high speeds we have to have a little more pause before new letter 
+                              if (CWsettings.wpm > 35) lacktime = 3.2;
+                                else if (CWsettings.wpm > 30) lacktime = 3.4;
+                              if (lowDuration > (lacktime * ditAvg)) {
+                                displayMorse();                   /// decode the morse character and display it
+                                wpm = (CWsettings.wpm + (int) (7200 / (dahAvg + 3*ditAvg))) / 2; //// recalculate speed in wpm
+                                if (CWsettings.wpm != wpm) {
+                                  CWsettings.wpm = wpm;
+                                  speedChanged = true;
+                                }
+                                decoderState = INTERCHAR_;
+                              }
+                          }
+                          break;
+      case INTERCHAR_:    if (checkTone()) {
+                              ON_();
+                              decoderState = HIGH_;
+                          } else {
+                              lowDuration = millis() - startTimeLow;             // we record the length of the pause
+                              lacktime = 7.0;                 ///  when high speeds we have to have a little more pause before new word
+                              if (CWsettings.wpm > 35) lacktime = 8.0;
+                                else if (CWsettings.wpm > 30) lacktime = 9.0;
+                              if (lowDuration > (lacktime * ditAvg)) {
+                                to_scroll(' ');
+                                decoderState = LOW_;
+                              }
+                          }
+                          break;
+      case LOW_:          if (checkTone()) {
+                              ON_();
+                              decoderState = HIGH_;
+                          }
+                          break;
+      case HIGH_:         if (checkTone()) {
+                              OFF_();
+                              decoderState = INTERELEMENT_;
+                          }
+                          break;
+    }
+}
+
+void ON_() {                                  /// what we do when we just detected a rising flank, from low to high
+   unsigned long timeNow = millis();
+   lowDuration = timeNow - startTimeLow;             // we record the length of the pause
+   startTimeHigh = timeNow;                          // prime the timer for the high state
+   vol.tone( sidetonePin, 744, realVolume[CWsettings.sidetoneVolume] );    // start generating side tone
+   lcd.setCursor(14,0);
+   lcd.write(255);
+   if (lowDuration < ditAvg * 2.4)                    // if we had an inter-element pause,
+      recalculateDit(lowDuration);                    // use it to adjust speed
+}
+
+void OFF_() {                                 /// what we do when we just detected a falling flank, from high to low
+  unsigned long timeNow = millis();
+  unsigned int threshold = (int) ( ditAvg * sqrt( dahAvg / ditAvg));
+
+  Serial.print("threshold: ");
+  Serial.println(threshold);
+  highDuration = timeNow - startTimeHigh;
+  startTimeLow = timeNow;
+
+  if (highDuration > (ditAvg * 0.5) && highDuration < (dahAvg * 2.5)) {    /// filter out VERY short and VERY long highs
+      if (highDuration < threshold) { /// we got a dit -
+            treeptr = CWtree[treeptr].dit;
+            //Serial.print(".");
+            recalculateDit(highDuration);
+      }
+      else  {        /// we got a dah
+            treeptr = CWtree[treeptr].dah;   
+            //Serial.print("-");   
+            recalculateDah(highDuration);                 
+      }
+  }
+  vol.noTone();                     // stop side tone
+  lcd.setCursor(14,0);
+  lcd.write(' ');
+
+}
+
+void recalculateDit(unsigned long duration) {       /// recalculate the average dit length
+  static int rot = 0;
+  static unsigned long collector;
+  
+  if (rot<4) {
+    collector += duration;
+    ++rot;
+  } else {
+    ditAvg = (4* ditAvg + collector) >> 3; //// equivalen to divide by eight - 4 old avg values plus the new 4 samples
+    rot = 0;
+    collector = 0;
+  }
+  //Serial.print("ditAvg: ");
+  //Serial.println(ditAvg);
+}
+
+void recalculateDah(unsigned long duration) {       /// recalculate the average dah length
+  static int rot = 0;
+  static unsigned long collector;
+
+  if (duration > 2* dahAvg)   {                       /// very rapid decrease in speed!
+      dahAvg = (dahAvg + 2* duration) / 3;            /// we adjust faster, ditAvg as well!
+      ditAvg = ditAvg/2 + dahAvg/6;
+  }
+  else {
+      if (rot<2) {
+        collector += duration;
+        ++rot;
+      } else {
+        dahAvg = (3* ditAvg + dahAvg + collector) >> 2; //// equivalen to divide by four - 1 old avg dah values, plus one computed from avg dit,  plus the new 2 samples
+        rot = 0;
+        collector = 0;
+      }
+  }
+    //Serial.print("dahAvg: ");
+    //Serial.println(dahAvg);
+}
+
 
 
