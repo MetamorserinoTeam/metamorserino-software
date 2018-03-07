@@ -1,3 +1,4 @@
+
 /**********************************************************************************************************************************
  * Copyright 2017, Willi Kraml (OE1WKL) 
  * 
@@ -14,8 +15,30 @@
  * IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *********************************************************************************************************************************/
-/// To DO: maybe configure bandwidth (number of samples)
-////// code used:
+
+ /**********************  I M P O R T A N T ! !   W I C H T I G ! !  *************************************************************
+  *  There are 2 (two) versions of hardware, currently, the only difference affecting the code is the rotary encoder
+  *  older versions: uses the KY-040 encoder (recognazible as it is on a separate PCB
+  *  newer versions: uses a more "standard" encoder
+  *  You NEED to #define which encoder is being used - if you fail to do so, the Arduino IDE (compiler) will throw an error ar you!
+  *  For this purpose, eliminate the '//' (starts a comment line) in front of one of the following lines! (at the type that is being used)
+  *  
+  *  Es gibt derzeit 2 (zwei) unterschiedliche Hardware Versionen, die sich vor allem im verwendeten Rotary Encoder unterscheiden
+  *  die ältere Version: benutzt einen KY-040 Encoder - man erkennt ihn leicht daran, dass er auf einer separaten kleinen Platine sitzt
+  *  die neuere Version: benutzt einen Encoder, der eher "Standard" ist
+  *  Du MUSST mit #define festlegen, welcher Encoder benutzt wird, sonst gibt es einen Fehler beim Kompilieren!
+  *  Dazu musst du die '//' (Beginn einer Kommentarzeile) bei einer der folgenden Zeilen entfernen! (Bei dem Typ, der verwendet wird)
+  */
+
+//#define KY_040_ENCODER
+//#define STANDARD_ENCODER
+
+/* the next line is a factor determining the sensitivity of the paddles */
+/* lower value: higher sensitivity; range should be within 0.90 and 0.99 */
+
+ #define SENS_FACTOR 0.96
+  
+////// code by others used in this sketch:
 /*
  *  NewliquidCrystal for LCD/I2C/TWI display - see https://bitbucket.org/fmalpartida/new-liquidcrystal/wiki/Home
  *                                             and http://arduino-info.wikispaces.com/LCD-Blue-I2C
@@ -51,8 +74,8 @@ LiquidCrystal_I2C lcd(0x3F, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // Set the LCD I
 ///
 /// Arduino pins used:
 
-const int leftPin =  A2;          // connect left paddle to pin 8
-const int rightPin = A0;         // and right one to Pin 9
+const int leftPin =  A2;          // connect left paddle to pin A2
+const int rightPin = A0;         // and right one to Pin A0
 const int sidetonePin = 9;      // to generate an ugly keyer side tone
 const int modeButtonPin = 4;    // input pin for mode button
 const int keyerPin = 13;        // this keys the transmitter /through a 2N2222 NPN transistor - at the same time lights up the LED on the Arduino
@@ -133,36 +156,38 @@ char scroll_memory[17];
 // variables to hold EEPROM addresses and things we need for reading / storing values in EEPROM
 int addressSignature ;   
 int addressCWsettings  ;
+
 // the following is only used to initially see if we have something stored in EEPROM
-const byte MorserSignature = '$';
+const byte MorserSignature = '+';   // 3.2 was '$', 4.0 was '@'
 byte eSignature;
 
 ///// GROUPOF5
-// 0 = A, 1 = 9, 2 = A9, 3 = A9?, 4 = ?<>, 5 = A9?<>, 6 = äA, 7= äA9, 8 = äA9.<>, 9 = calls
+// 0 = A, 1 = 9, 2 = A9, 3 = A9?, 4 = ?<>, 5 = A9?<>, 6 = äA, 7= äA9, 8 = äA9.<>, 9 = calls, 10=q-groups & abbreviations
 // Grouping:   a    |  9   |  .   |  <>   |  a9  | .<>   |   äa    | äa9   | a9.   | a9.<> | äa9.<>
 //            4-29  | 30-39| 40-48| 48-52 | 4-39 | 40-52 | 0-29    | 0-39  | 4-48  | 4-52  | 0-52 
 
-const byte bounds[][2] = {  {4,29}, {30,39}, {4, 39}, {4,48}, {40, 52}, {4, 52}, {0,29}, {0, 39}, {0, 52}, {0,0} };
-const char groups[][7] = { " a    ", "  9   ", " a9   ", " a9?  ", "   ?<>", " a9?<>", "\xE1" "a    ", "\xE1" "a9   ", "\xE1" "a9?<>", "CALLs " };
+const byte bounds[][2] = {  {4,29}, {30,39}, {4, 39}, {4,48}, {40, 52}, {4, 52}, {0,29}, {0, 39}, {0, 52}, {0,0}, {0,0}};
+const char groups[][7] = { " a    ", "  9   ", " a9   ", " a9?  ", "   ?<>", " a9?<>", "\xE1" "a    ", "\xE1" "a9   ", "\xE1" "a9?<>", "CALLs ", "ABBRV " };
 
 // the funny spelling of German ä: reason is that these are "local" characters within the LCD display, not Unicode or whatever, so I need to use hex escapes
 // in order to clearly indicate where the hex escape ends, I need to break the string into substrings....
 
 // structure to contain persistent CW settings, to be stored in EEPROM
 struct CWs {
-  int wpm;                      // keyer speed in buchstaben pro minute
+  int wpm;                      // keyer speed in wörtern pro minute
   unsigned sidetoneFreq;        // side tone frequency
   int sidetoneVolume;           // side tone volume
   boolean didah;                // paddle polarity
   byte keyermode;               // Iambic keyer mode: see the #defines above
-  byte farnsworthMode;           // trainer: extend pauses by 1, 2, 3 , 4 or 5
+  byte farnsworthMode;           // trainer: extend pauses by 1, 2, 3 to 9
   byte generatorMode;            // trainer: what symbol (groups) are we going to send?
   int tLeft;                    // threshold for left paddle
   int tRight;                   // threshold for right paddle
+  boolean useExtPaddle;         // true if we use an external (mechanical) paddle instead of the touch sensors
 };
 
 struct CWs CWsettings = {
-  60, 650, 5, false, 0, 4, 2, 110, 110 };
+  15, 650, 5, false, 0, 4, 2, 110, 110, false };
 
 boolean settingsDirty = false;    // we use this to see if anything in CW settings has changed, so we need to write settings into EEPROM
 
@@ -365,13 +390,261 @@ const byte pool[][2] PROGMEM = {
                {B00010100, 6}   // <sk> 52         
             };
 
-            
+
+const int NUMBER_OF_ELEMENTS = 241;
+const int MAX_SIZE = 9;
+
+/// strings for q-groups and abbreviations to be stored in PROGMEM
+const char abbreviations [NUMBER_OF_ELEMENTS] [MAX_SIZE] PROGMEM = { 
+{ "33" },
+{ "44" },
+{ "55" },
+{ "72" },
+{ "73" },
+{ "88" },
+{ "99" },
+{ "aa" },
+{ "ab" },
+{ "abt" },
+{ "ac" },
+{ "adr" },
+{ "af" },
+{ "agc" },
+{ "agn" },
+{ "alc" },
+{ "am" },
+{ "am" },
+{ "ans" },
+{ "ant" },
+{ "atv" },
+{ "avc" },
+{ "award" },
+{ "awdh" },
+{ "awds" },
+{ "bc" },
+{ "bci" },
+{ "bcnu" },
+{ "bd" },
+{ "bfo" },
+{ "bk" },
+{ "bpm" },
+{ "btr" },
+{ "btw" },
+{ "bug" },
+{ "buro" },
+{ "b4" },
+{ "call" },
+{ "cfm" },
+{ "cl" },
+{ "conds" },
+{ "condx" },
+{ "congrats" },
+{ "cq" },
+{ "cu" },
+{ "cuagn" },
+{ "cul" },
+{ "cw" },
+{ "db" },
+{ "dc" },
+{ "de" },
+{ "diff" },
+{ "dr" },
+{ "dwn" },
+{ "dx" },
+{ "ee" },
+{ "el" },
+{ "elbug" },
+{ "es" },
+{ "excus" },
+{ "fb" },
+{ "fer" },
+{ "fm" },
+{ "fone" },
+{ "fr" },
+{ "frd" },
+{ "freq" },
+{ "fwd" },
+{ "ga" },
+{ "gb" },
+{ "gd" },
+{ "gd" },
+{ "ge" },
+{ "gl" },
+{ "gm" },
+{ "gn" },
+{ "gnd" },
+{ "gp" },
+{ "gs" },
+{ "gt" },
+{ "gud" },
+{ "ham" },
+{ "hf" },
+{ "hi" },
+{ "hpe" },
+{ "hr" },
+{ "hrd" },
+{ "hrs" },
+{ "hv" },
+{ "hvy" },
+{ "hw" },
+{ "i" },
+{ "iaru" },
+{ "if" },
+{ "ii" },
+{ "info" },
+{ "inpt" },
+{ "irc" },
+{ "itu" },
+{ "k" },
+{ "khz" },
+{ "km" },
+{ "kw" },
+{ "ky" },
+{ "lbr" },
+{ "lf" },
+{ "lid" },
+{ "lis" },
+{ "lng" },
+{ "log" },
+{ "lp" },
+{ "lsb" },
+{ "luf" },
+{ "lw" },
+{ "ma" },
+{ "mesz" },
+{ "mez" },
+{ "mgr" },
+{ "mhz" },
+{ "min" },
+{ "mins" },
+{ "mni" },
+{ "mod" },
+{ "msg" },
+{ "mtr" },
+{ "muf" },
+{ "my" },
+{ "n" },
+{ "net" },
+{ "nf" },
+{ "nil" },
+{ "no" },
+{ "nr" },
+{ "nr" },
+{ "nw" },
+{ "ok" },
+{ "om" },
+{ "op" },
+{ "osc" },
+{ "oscar" },
+{ "output" },
+{ "ow" },
+{ "pa" },
+{ "pep" },
+{ "pm" },
+{ "pse" },
+{ "psed" },
+{ "pwr" },
+{ "px" },
+{ "qra" },
+{ "qrb" },
+{ "qrg" },
+{ "qrl" },
+{ "qrm" },
+{ "qrn" },
+{ "qro" },
+{ "qrp" },
+{ "qrq" },
+{ "qrs" },
+{ "qrt" },
+{ "qru" },
+{ "qrv" },
+{ "qrx" },
+{ "qrz" },
+{ "qsb" },
+{ "qsk" },
+{ "qsl" },
+{ "qso" },
+{ "qsp" },
+{ "qst" },
+{ "qsy" },
+{ "qtc" },
+{ "qth" },
+{ "qtr" },
+{ "r" },
+{ "rcvd" },
+{ "re" },
+{ "ref" },
+{ "rf" },
+{ "rfi" },
+{ "rig" },
+{ "rpt" },
+{ "rprt" },
+{ "rst" },
+{ "rtty" },
+{ "rx" },
+{ "sase" },
+{ "shf" },
+{ "sigs" },
+{ "sked" },
+{ "sn" },
+{ "sp" },
+{ "sri" },
+{ "ssb" },
+{ "sstv" },
+{ "stn" },
+{ "sure" },
+{ "swl" },
+{ "swr" },
+{ "t" },
+{ "temp" },
+{ "test" },
+{ "tia" },
+{ "tks" },
+{ "tnx" },
+{ "trx" },
+{ "tu" },
+{ "tvi" },
+{ "tx" },
+{ "u" },
+{ "ufb" },
+{ "uhf" },
+{ "ukw" },
+{ "unlis" },
+{ "up" },
+{ "ur" },
+{ "usb" },
+{ "utc" },
+{ "v" },
+{ "vert" },
+{ "vfo" },
+{ "vhf" },
+{ "vl" },
+{ "vln" },
+{ "vy" },
+{ "w" },
+{ "watts" },
+{ "wid" },
+{ "wkd" },
+{ "wkg" },
+{ "wl" },
+{ "wpm" },
+{ "wtts" },
+{ "wx" },
+{ "xcus" },
+{ "xcvr" },
+{ "xmas" },
+{ "xtal" },
+{ "xyl" },
+{ "yl" },
+{ "z" }
+ };
+
 //////////////////////////////////////////////////////////////////////////////
 //
 //   State Machine Defines
  
 enum MORSE_TYPE {KEY_DOWN, KEY_UP };
-enum GEN_TYPE { GROUPOF5, CALLSIGNS, QSOTEXT, TESTALL };
+enum GEN_TYPE { GROUPOF5, CALLSIGNS,  Q_ABBREV, TESTALL };
 
 ///--------------------------
 /// LCD glyphs for volume control
@@ -448,6 +721,9 @@ byte volGlyph[][8] = {
 
 const int audioInPin = A6;
 
+boolean keyTx = false;             // when state is set by manual key or touch paddle, then true!
+                                   // we use this to decide if Tx should be keyed or not
+
 float magnitude ;
 int magnitudelimit = 100;
 int magnitudelimit_low = 100;
@@ -509,9 +785,9 @@ boolean filteredState = false;
 boolean filteredStateBefore = false;
 
 
-/////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
 ///////// SETUP
-/////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
 
 void setup() {
   // put your setup code here, to run once:
@@ -519,22 +795,26 @@ void setup() {
   pinMode(keyerPin, OUTPUT);        // we can use the built-in LED to show when the transmitter is being keyed
   digitalWrite(keyerPin, LOW);
   pinMode(straightPin, INPUT_PULLUP);
+  pinMode(leftPin, INPUT_PULLUP);   // the touch library does this itself - we just do it here in case we use the eternal paddles
+  pinMode(rightPin, INPUT_PULLUP);
   
   // set up the encoder
-  pinMode(PinCLK,INPUT);
-  pinMode(PinDT,INPUT);  
-  attachInterrupt (1,isr,CHANGE);   // interrupt 1 is always connected to pin 2 on Arduino UNO
+  pinMode(PinCLK,INPUT_PULLUP);
+  pinMode(PinDT,INPUT_PULLUP);  
+
+#if defined (KY_040_ENCODER)
+  attachInterrupt (1,isr,CHANGE);   // interrupt 1 is always connected to pin 2 on Arduino UNO /// needs to be LOW insted aof CHANGE for the new encoders
+#elif defined (STANDARD_ENCODER)
+  attachInterrupt (1,isr,LOW);   // interrupt 1 is always connected to pin 2 on Arduino UNO /// needs to be LOW insted aof CHANGE for the new encoders
+#else
+  #error Encoder undefined ! Encoder-Typ nicht definiert ! Read  souce code! Sourcecode lesen ! Line/Zeilen 19 ff !!!
+#endif
 
   // Setup button timers (all in milliseconds / ms)
   // (These are default if not set, but changeable for convenience)
   modeButton.debounceTime   = 12;   // Debounce timer in ms
   modeButton.multiclickTime = 170;  // Time limit for multi clicks
   modeButton.longClickTime  = 310; // time until "held-down clicks" register
-
-  // calibrate the paddles
-
-  refLeft = ADCTouch.read(leftPin, 1000);    //create reference values to
-  refRight = ADCTouch.read(rightPin, 1000);      //account for the capacitance of the pad
 
 
   // set up the LCD's number of rows and columns:   
@@ -553,9 +833,7 @@ void setup() {
  
 // read what is stored in EEPROM:
 //   signature  byte (to see if we actually have values we can meaningfully read - otherwise we use the defaults
-//   currentVfo byte (the VFO settings to start with) 
 //   CWsettings struct CWs CWsettings (speed, polarity,  mode etc) - 
-//   VFObank struct VFO VFObank[9] (frequencies, mode etc) 
 
 // calculate addresses
   addressSignature    = EEPROM.getAddress(sizeof(eSignature));
@@ -564,40 +842,67 @@ void setup() {
   // check signature
   eSignature = EEPROM.readByte(addressSignature);
   if (eSignature == MorserSignature) {                    // OK, we read in values from EEPROM
-    EEPROM.readBlock(addressCWsettings, CWsettings);
+    EEPROM.readBlock(addressCWsettings, CWsettings);      // otherwise we use the defaults defined in this program
+  }
+
+  
+  // calibrate the paddles
+
+  refLeft = ADCTouch.read(leftPin, 1000);    //create reference values to
+  refRight = ADCTouch.read(rightPin, 1000);      //account for the capacitance of the pad
+
+  if (CWsettings.useExtPaddle)   {                   // ext paddle configured, check if it is there
+    if (refLeft < 630) {
+      CWsettings.useExtPaddle = false;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(F("Use Touch Paddle"));
+      delay(1000);
+      saveConfig();
+    }
+  } else {                                              // touch configured, check for calibration and for external paddle
+    if (refLeft > 630 && refRight > 630) {             // we use touch sensors and detect touch sensor squeeze at start-up
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(F("Calibration"));
+      CWsettings.tLeft = refLeft; CWsettings.tRight = refRight;
+      delay(1000);
+        lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(F("Release paddles!"));
+        delay(1250);
+      refLeft = ADCTouch.read(leftPin, 1000);    //create reference values to
+      refRight = ADCTouch.read(rightPin, 1000);      //account for the capacitance of the pad
+      CWsettings.tLeft =  (int)((float)(CWsettings.tLeft - refLeft) * SENS_FACTOR);
+      CWsettings.tRight = (int)((float)(CWsettings.tRight - refRight) * SENS_FACTOR);
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(F("off: ")); lcd.print(refLeft); lcd.print(" "); lcd.print(refRight);
+       lcd.setCursor(0,1);
+      lcd.print(F("on+: ")); lcd.print(CWsettings.tLeft); lcd.print(" "); lcd.print(CWsettings.tRight);
+      saveConfig();
+      delay(3000);
+    } // end calibration mode
+
+    // check for external paddles connected; you need to close at least one of the contacts for that purpose at start-up
+    pinMode(leftPin, INPUT_PULLUP);pinMode(rightPin, INPUT_PULLUP);
+    if ((analogRead(leftPin) < 50) || (analogRead(rightPin) < 50)) {    // a mechanical paddle is pressed, so switch to use them
+      CWsettings.useExtPaddle = true;
+      saveConfig();
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(F("Use Ext. Paddle"));
+      delay(1000);
+    } // end check for external paddle
   }
   
- 
-  if (refLeft > 600 && refRight > 600) {                  // detect calibration mode at start-up
-      lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print(F("Calibration"));
-    CWsettings.tLeft = refLeft; CWsettings.tRight = refRight;
-    delay(1000);
-      lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print(F("Release paddles!"));
-      delay(1250);
-    refLeft = ADCTouch.read(leftPin, 1000);    //create reference values to
-    refRight = ADCTouch.read(rightPin, 1000);      //account for the capacitance of the pad
-    CWsettings.tLeft =  (int)((float)(CWsettings.tLeft - refLeft) * 0.8);
-    CWsettings.tRight = (int)((float)(CWsettings.tRight - refRight) * 0.8);
-    saveConfig();
     
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print(F("off: ")); lcd.print(refLeft); lcd.print(" "); lcd.print(refRight);
-     lcd.setCursor(0,1);
-    lcd.print(F("on+: ")); lcd.print(CWsettings.tLeft); lcd.print(" "); lcd.print(CWsettings.tRight);
-    delay(2000);
-  } // end calibration mode
-  
   // display startup screen 
   lcd.clear();
   lcd.setCursor(0,0);
   lcd.print(F("MetaMorserino"));
   lcd.setCursor(0,1);
-  lcd.print(F("V 3.2 (oe1wkl)"));
+  lcd.print(F("V 4.1 (oe1wkl)"));
   delay(1200);
   lcd.clear();
 
@@ -618,13 +923,10 @@ void setupTrainerMode() {
       k=0; 
       startAgain = true;
 
-      if (CWsettings.generatorMode < 8)
-          generatorMode = GROUPOF5;
-      else
-          generatorMode = CALLSIGNS;
-      startPool = bounds[CWsettings.generatorMode][0];
-      endPool = bounds[CWsettings.generatorMode][1];
-      
+      updateGeneratorMode();
+
+      ditLength = 1200 / CWsettings.wpm;                    // set new value for length of dits and dahs
+      dahLength = 3 * ditLength;
       interCharacterSpace = 3 * ditLength  *CWsettings.farnsworthMode;
       interWordSpace = 7 * ditLength * CWsettings.farnsworthMode;
       delay(1000);
@@ -705,26 +1007,7 @@ void loop() {
                           if (active)
                             generateCW();
                           break;
-/*      case morseDecoder:  checkTone();                        // we listen for a tone on analog in
-                          if (filteredState != filteredStateBefore) {   // we detetced a change on input
-                              getDurations();                     // and measure durations
-                              checkDitDah();                      // and decode element, print letter if at end
-                          } 
-                          //////////////////////////////
-                          // write if no more letters //
-                          //////////////////////////////
-                          if ((millis() - startTimeLow) > (highduration * 6) && stop == false) {
-                            displayMorse();
-                            stop = true;
-                          }
-                          lasthighduration = highduration;
-                          filteredStateBefore = filteredState;
-                          if (speedChanged) {
-                            speedChanged = false;
-                            displayCWspeed (CWsettings.wpm);
-                          }
-                          break;
-                          */
+
       case morseDecoder: doDecode();
                          if (speedChanged) {
                             speedChanged = false;
@@ -775,7 +1058,7 @@ void loop() {
     switch (encoderState) {
       case speedSettingMode:  CWsettings.wpm += encoderPos;
                               encoderPos = 0;                                     // reset the encoder
-                              CWsettings.wpm = constrain(CWsettings.wpm, 5, 30);
+                              CWsettings.wpm = constrain(CWsettings.wpm, 5, 40);
                               ditLength = 1200 / CWsettings.wpm;             // set new value for length of dits and dahs
                               dahLength = 3 * ditLength;
                               interCharacterSpace = 3*ditLength*CWsettings.farnsworthMode;
@@ -847,53 +1130,75 @@ void setPolarityMode() {
 }
 
 void setGeneratorMode() {
-  CWsettings.generatorMode += (encoderPos+10);
+  CWsettings.generatorMode += (encoderPos+11);
   encoderPos = 0;                                     // reset the encoder
-  CWsettings.generatorMode = CWsettings.generatorMode % 10;
+  CWsettings.generatorMode = CWsettings.generatorMode % 11;
   displayGeneratorMode();
-  /// set the boundaries, the mode (GROUPOF5 or CALLSIGNS?)
-  if (CWsettings.generatorMode < 8) {
-    generatorMode = GROUPOF5;
-    startPool = bounds[CWsettings.generatorMode][0];
-    endPool = bounds[CWsettings.generatorMode][1];
-    }
-  else
-    generatorMode = CALLSIGNS;
+  updateGeneratorMode();
   settingsDirty = true;
  
   displayEncoderMode();
 }
 
+void updateGeneratorMode() {
+  /// set the boundaries, the mode (GROUPOF5 or CALLSIGNS or Q_ABBREV)
+  if (CWsettings.generatorMode < 9) {
+    generatorMode = GROUPOF5;
+    startPool = bounds[CWsettings.generatorMode][0];
+    endPool = bounds[CWsettings.generatorMode][1];
+    }
+  else if (CWsettings.generatorMode == 9)
+    generatorMode = CALLSIGNS;
+  else generatorMode = Q_ABBREV;
+}
 
 // functions related to paddle actions
 // paddle reads a capacitive sensor, connected to pin, 
 // and returns a logical value true or false
+// but if mdoe is set to use external apddles, we just check if the input has been down close to 0
 
 boolean checkPaddles() {
   long t = millis();
-  value0 = ADCTouch.read(leftPin, 12);   //no second parameter
-  value1 = ADCTouch.read(rightPin, 12);     //   --> 100 samples
-  
-  value0 -= refLeft;       //remove offset
-  value1 -= refRight;
-
-  if (value0>40) {                                                                  // adaptive calibration
-      CWsettings.tLeft = (7*CWsettings.tLeft + (int)((float)value0 * 0.8)  ) / 8;
-  //Serial.print("left: "); Serial.println(CWsettings.tLeft); Serial.println(millis()-t);
-  }
-  if (value0 > CWsettings.tLeft)
+  if (CWsettings.useExtPaddle) {           // see if paddles shortened to GROUND
+    pinMode(leftPin, INPUT_PULLUP);
+    if (analogRead(leftPin) < 50) {
+      // Serial.print("left: "); Serial.println(analogRead(leftPin));
       leftKey = true;
+    }
     else
       leftKey = false;
-  if (value1 > 40) {                                                               // adaptive calibration
-    CWsettings.tRight = (7*CWsettings.tRight + (int)((float)value1 * 0.8) ) / 8;
-  //   Serial.print("right: "); Serial.println(CWsettings.tRight);Serial.println(millis()-t);
-  }
-  if (value1 > CWsettings.tRight)
+  pinMode(rightPin, INPUT_PULLUP);
+  if (analogRead(rightPin) < 50) {
+    // Serial.print("right: "); Serial.println(analogRead(rightPin));
       rightKey = true;
+    }
     else
       rightKey = false;
-
+  } else {                                  // evaluate sensors
+    value0 = ADCTouch.read(leftPin, 12);   //no second parameter
+    value1 = ADCTouch.read(rightPin, 12);     //   --> 100 samples
+    
+    value0 -= refLeft;       //remove offset
+    value1 -= refRight;
+  
+    if (value0>40) {                                                                  // adaptive calibration
+        CWsettings.tLeft = (7*CWsettings.tLeft + (int)((float)value0 * SENS_FACTOR)  ) / 8;
+    //Serial.print("left t,v : "); Serial.print(CWsettings.tLeft); Serial.print(" "); Serial.println(value0);// Serial.println(millis()-t);
+    }
+    if (value0 > CWsettings.tLeft)
+        leftKey = true;
+      else
+        leftKey = false;
+    
+    if (value1 > 40) {                                                               // adaptive calibration
+      CWsettings.tRight = (7*CWsettings.tRight + (int)((float)value1 * SENS_FACTOR) ) / 8;
+    //Serial.print("right t,v : " ); Serial.print(CWsettings.tRight);  Serial.print(" "); Serial.println(value1);//Serial.println(millis()-t);
+    }
+    if (value1 > CWsettings.tRight)
+        rightKey = true;
+      else
+        rightKey = false;
+  }
   return (leftKey || rightKey);
 }
 
@@ -1323,6 +1628,9 @@ void fetchNextChar() {      // retrieve the next character to be output, and set
       case CALLSIGNS:                               /// 
               character = generateCallsign( ( characterCounter == 1 ? true : false) );
               break;
+      case Q_ABBREV:
+              character = generateAbbrev( (characterCounter == 1 ? true : false ) );
+              break;
       case TESTALL:                                 /// TESTALL is for debugging puposes only
               if (j > 52)
                 character = j = 0;
@@ -1335,24 +1643,28 @@ void fetchNextChar() {      // retrieve the next character to be output, and set
       // insert other cases here, e.g. call signs, qso texts, clear texts or whatever
     }         
     ++ characterCounter;
+    //Serial.print("CWsettings.generatorMode: ");
+    //Serial.println(CWsettings.generatorMode);
+    //Serial.print("generatorMode: ");
+    //Serial.println(generatorMode);
+    //Serial.print("characterCounter: ");
+    //Serial.println(characterCounter);
+    //Serial.println(character);
   }
             
     // now initialise everything
     if (character > 52 )          /// space
       NoE = 0;
     else {                        //// look up in our table - read it from Progmem into buffer first
-      //poolPair =  pgm_read_word (pool[character]);
       NoE = pgm_read_byte( &pool[character][1]);
       bitmask = pgm_read_byte( &pool[character][0]);
-      //NoE = pool[character][1];   // number of elements
-      //bitmask = pool[character][0];
       //Serial.print("Bitmask: ");
-    //Serial.println(bitmask, BIN);
+      //Serial.println(bitmask, BIN);
       for (i=0; i<NoE; ++i) {
         nextElement[i] = (bitmask & B10000000 ? 1 : 0 );    // get MSB and store it in array
         bitmask = bitmask << 1;                 // shift bitmask 1 bit to the left 
               //Serial.print("Bitmask: ");
-    //Serial.println(bitmask, BIN);
+      //Serial.println(bitmask, BIN);
 
       }
     }
@@ -1434,7 +1746,7 @@ char generateCallsign(boolean next) {             // generate a new random strin
               call[l] = random(4,30);
               ++l;
               break;
-    } // we haev a prefix by now
+    } // we have a prefix by now
     // generate a number
     call[l] = random(30,40);
     ++l;
@@ -1458,6 +1770,34 @@ char generateCallsign(boolean next) {             // generate a new random strin
   }
   // return next chr of callsign
   return call[i++];
+}
+
+
+char generateAbbrev(boolean next) {     // randomly fetch q-groups and abbreviations from PROGMEM and return the characters byte by byte
+  static char abbrev[MAX_SIZE];
+  char c;
+  static byte i=1, l=1;                 // i = index, l = length of abbrev (including terminating 53 / space)
+  int j;
+
+ if (next) {
+    i = l;
+  }
+  if (i == l) {                                 // we need to fetch a new abbrev
+    //Serial.print("Next:" );
+    i = 0;
+    j = random(0,NUMBER_OF_ELEMENTS);
+    //Serial.println(j);
+    memcpy_P (&abbrev, &abbreviations[j], sizeof abbrev);
+    //Serial.println(abbrev);
+    l = strlen(abbrev);
+    //Serial.println(l);
+    abbrev[l] = 53 + 93;                             // we need this as the final char
+    ++l;
+  }
+  // return next char of abbreviation
+ c = abbrev[i++];
+ return (c < 58 ? c-18 : c-93 );
+ // we do NOT use ASCII encoding for generating morse code!!
 }
 
 /////////////////////////
@@ -1530,7 +1870,7 @@ void topMenu() {                            // display top-menu and wait for sel
 /// interrupt service routine
 
 void isr ()  {                    // Interrupt service routine is executed when a HIGH to LOW transition is detected on CLK
- if ( micros() < (rotating + 4500) ) return;  
+ if ( micros() < (rotating + 9500) ) return;  
  if (digitalRead(PinCLK))
    up = digitalRead(PinDT);
  else
@@ -1567,55 +1907,59 @@ void setupGoertzel () {                 /// pre-compute some values that are com
 
 boolean checkTone() {                 /// check if we have a tone signal at A6 with Gortzel's algorithm, and apply some noise blanking as well
                                    /// the result will be in globale variable filteredState
+                                   /// we return true when we detected a change in state, false otherwise!
   static boolean realstate = false;
   static boolean realstatebefore = false;
   static unsigned long lastStartTime = 0;
 
-  for (char index = 0; index < n; index++)
-      testData[index] = analogRead(audioInPin);
-  for (char index = 0; index < n; index++) {
-    float Q0;
-    Q0 = coeff * Q1 - Q2 + (float) testData[index];
-    Q2 = Q1;
-    Q1 = Q0;
-  }
-  float magnitudeSquared = (Q1 * Q1) + (Q2 * Q2) - Q1 * Q2 * coeff; // we do only need the real part //
-  magnitude = sqrt(magnitudeSquared);
-  Q2 = 0;
-  Q1 = 0;
-
-  //Serial.print(magnitude); Serial.println();  //// here you can measure magnitude for setup..
-
-  ///////////////////////////////////////////////////////////
-  // here we will try to set the magnitude limit automatic //
-  ///////////////////////////////////////////////////////////
-
-  if (magnitude > magnitudelimit_low) {
-    magnitudelimit = (magnitudelimit + ((magnitude - magnitudelimit) / 6)); /// moving average filter
-  }
-
-  if (magnitudelimit < magnitudelimit_low)
-    magnitudelimit = magnitudelimit_low;
-
-  ////////////////////////////////////
-  // now we check for the magnitude //
-  ////////////////////////////////////
-
-  if (magnitude > magnitudelimit * 0.6) // just to have some space up
+if (((!digitalRead(straightPin))) || checkPaddles() ) {
     realstate = true;
-  else
+    keyTx = true;
+    }
+else {
     realstate = false;
+    keyTx = false;
+    for (char index = 0; index < n; index++)
+        testData[index] = analogRead(audioInPin);
+    for (char index = 0; index < n; index++) {
+      float Q0;
+      Q0 = coeff * Q1 - Q2 + (float) testData[index];
+      Q2 = Q1;
+      Q1 = Q0;
+    }
+    float magnitudeSquared = (Q1 * Q1) + (Q2 * Q2) - Q1 * Q2 * coeff; // we do only need the real part //
+    magnitude = sqrt(magnitudeSquared);
+    Q2 = 0;
+    Q1 = 0;
+  
+    //Serial.print(magnitude); Serial.println();  //// here you can measure magnitude for setup..
+  
+    ///////////////////////////////////////////////////////////
+    // here we will try to set the magnitude limit automatic //
+    ///////////////////////////////////////////////////////////
+  
+    if (magnitude > magnitudelimit_low) {
+      magnitudelimit = (magnitudelimit + ((magnitude - magnitudelimit) / 6)); /// moving average filter
+    }
+  
+    if (magnitudelimit < magnitudelimit_low)
+      magnitudelimit = magnitudelimit_low;
+  
+    ////////////////////////////////////
+    // now we check for the magnitude //
+    ////////////////////////////////////
+  
+    if (magnitude > magnitudelimit * 0.6) // just to have some space up
+      realstate = true;
+    else
+      realstate = false;
+  }
 
-/*    this probably would need some de-bouncing, too? */
-  //////////////////////////////////////////////////////////////////////
-  // Modifications by PA2RDK                                  /////// //
-  // This code makes it possible to connect a key to an Arduino Pin.  //
-  if (!digitalRead(straightPin))
-    realstate = true;
-  /////////////////////////////////////////////////////////////
+
 
   /////////////////////////////////////////////////////
   // here we clean up the state with a noise blanker //
+  // (debouncing)                                    //
   /////////////////////////////////////////////////////
 
   if (realstate != realstatebefore)
@@ -1636,7 +1980,7 @@ boolean checkTone() {                 /// check if we have a tone signal at A6 w
   return false;                                 // no change detected in filteredState
  else {
     filteredStateBefore = filteredState;
-    return true;
+    return true;                                // change detected in filteredState
  }
 }   /// end checkTone()
 
@@ -1697,6 +2041,9 @@ void ON_() {                                  /// what we do when we just detect
    lowDuration = timeNow - startTimeLow;             // we record the length of the pause
    startTimeHigh = timeNow;                          // prime the timer for the high state
    vol.tone( sidetonePin, 744, realVolume[CWsettings.sidetoneVolume] );    // start generating side tone
+   if (keyTx)
+      digitalWrite(keyerPin, HIGH);                 // turn the LED on, key transmitter, or whatever
+
    lcd.setCursor(14,0);
    lcd.write(255);
    if (lowDuration < ditAvg * 2.4)                    // if we had an inter-element pause,
@@ -1725,6 +2072,7 @@ void OFF_() {                                 /// what we do when we just detect
       }
   }
   vol.noTone();                     // stop side tone
+  digitalWrite(keyerPin, LOW);      // stop keying Tx
   lcd.setCursor(14,0);
   lcd.write(' ');
 
