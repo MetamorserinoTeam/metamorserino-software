@@ -1,35 +1,30 @@
-In diesem Verzeichnis findet man die Unterlagen für den Arduino-basierten CW Keyer "metMorserino".
+# In diesem Verzeichnis findet man die Unterlagen für den Arduino-basierten CW Keyer "metMorserino".
 
 Unterverzeichnisse:
 	- Arduino_Libraries: diese Bibliotheken müsen in der Arduino Entwicklungsumgebung
 	  vorhanden sein, damit fehlerfrei kompiliert werden kann. Es wurde derzeit die Arduino
 	  Entwicklungsumgebung Version 1.8.1 von arduino.cc verwendet.
-
 	- Driver_USB_Mac_PC: Damit der PC (oder Mac) mit dem Arduino Nano kommunizieren kann,
 	  muss ein passender Treiber installiert werden.
-
 	- Hardware: Schaltung und Aufbauanleitung für den Bausatz.
-
 	- Version_2: Arduino Software für Version 2 (CW Keyer + CW Trainer)
-
 	- Version_3: Arduino Software für Version 3 (CW Keyer + CW Trainer + CW Dekoder)
-
 	- Version_4: Arduino Software für Version 4 (Unterstützung externer Paddles, Erweiterungen)
 
-Hardware – Versionshistorie:
+## Hardware – Versionshistorie:
 
-Version 1: erste Auflage des Bausatzes
-Version 1a: zweite Auflage des Bausatzes. Fehlerbehebung auf Platine, anderer Lautsprecher (der alte ist 
+- Version 1: erste Auflage des Bausatzes
+- Version 1a: zweite Auflage des Bausatzes. Fehlerbehebung auf Platine, anderer Lautsprecher (der alte ist 
 	    nicht mehr lieferbar), anderer Drehgeber.
 
-Software - Versionshistorie:
+## Software - Versionshistorie:
 
-Version 1 (nicht veröffentlicht): 
-Automatischer CW Keyer mit Touch-Sensoren
-Version 2: zusätzliche Funktion: CW Übungsgenerator m. 5er-Gruppen und Callsigns
-Version 3: zusätzliche Funktion: CW Dekoder (Input entweder Tonsignal, oder Handtaste). Tonsignal-Input 
+- Version 1 (nicht veröffentlicht): 
+	Automatischer CW Keyer mit Touch-Sensoren
+- Version 2: zusätzliche Funktion: CW Übungsgenerator m. 5er-Gruppen und Callsigns
+- Version 3: zusätzliche Funktion: CW Dekoder (Input entweder Tonsignal, oder Handtaste). Tonsignal-Input 
 	   erfordert Hardware-Erweiterung (NF Verstärker)
-Version 4: zusätzliche Funktion: Möglichkeit, externes mechanisches Paddle anzuschließen anstelle der 
+- Version 4: zusätzliche Funktion: Möglichkeit, externes mechanisches Paddle anzuschließen anstelle der 
 	                         Touch-Sensoren
            erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
 			        Touchsensor (als Cootie / Sideswiper) verwendbar
@@ -62,7 +57,7 @@ V. 4.5: Es wurde ein Fehler behoben, der im Keyer-Modus falsches Timing in den M
 		den Iambic B Modus eingeschossen sind, weniger Probleme bereiten (der Modus B sollte eher nicht 
 		verwendet werden).
 
-I M P O R T A N T ! !   W I C H T I G ! !  2. Serie Bausätze und Version 4!
+## I M P O R T A N T ! !   W I C H T I G ! !  2. Serie Bausätze und Version 4!
 
   * There are 2 (two) versions of hardware, currently, the only difference affecting the code is the
     rotary encoder
