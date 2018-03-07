@@ -1,6 +1,6 @@
 
- #define metaVERSION "4.4"
- const byte MorserSignature = '*';   // 4.2 and 4.3 had '?';  3.2 was '$', 4.0 was '@', 4.1 was '+'
+ #define metaVERSION "4.5"
+ const byte MorserSignature = '*';   // 4.4. was the same; 4.2 and 4.3 had '?';  3.2 was '$', 4.0 was '@', 4.1 was '+'
 
  
 /**********************************************************************************************************************************
@@ -1290,10 +1290,10 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
 
             ktimer = ditLength;                              // prime timer for dit
             switch (CWsettings.keyermode) {
-              case IAMBICB:  curtistimer = min(55,ditLength);                // Curtis mode B registers paddle presses almost immediately when element begins
+              case IAMBICB:  curtistimer = max(12, ditLength /6) ;                // Curtis mode B registers paddle presses almost immediately when element begins
                              break;
               case IAMBICBplus:
-                             curtistimer = min(55,(ditLength *48 / 128));    // enhanced Curtis mode B starts checking after 2/3 of a dit
+                             curtistimer = ditLength * .4;    // enhanced Curtis mode B starts checking after 40% of a dit
                              break;
               case IAMBICA:
               case ULTIMATIC:
@@ -1312,10 +1312,10 @@ boolean doPaddleIambic (boolean dit, boolean dah) {
             
             ktimer = dahLength;
             switch (CWsettings.keyermode) {
-              case IAMBICB:  curtistimer = min(55,ditLength);                // Curtis mode B registers paddle presses immediately when element begins
+              case IAMBICB:  curtistimer = max(12, ditLength /6) ;               // Curtis mode B registers paddle presses almost immediately when element begins
                              break;
               case IAMBICBplus:
-                             curtistimer =min(55, (dahLength * 48) / 128);    // enhanced Curtis mode B starts checking after about a third of dah length
+                             curtistimer = dahLength * .4;    // enhanced Curtis mode B starts checking after 40% of dah length
                              break;
               case IAMBICA:
               case ULTIMATIC:
