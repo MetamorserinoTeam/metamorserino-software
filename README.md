@@ -27,11 +27,11 @@ Unterverzeichnisse:
 - Version 4: 
 	- zusätzliche Funktion: Möglichkeit, externes mechanisches Paddle anzuschließen anstelle der 
 	                         Touch-Sensoren
-         - erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
+        - erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
 			        Touchsensor (als Cootie / Sideswiper) verwendbar
-         - erweiterte Funktion: Dekoder kann zum Tasten eines Senders verwendet werden (außer bei Tonsignal 
+        - erweiterte Funktion: Dekoder kann zum Tasten eines Senders verwendet werden (außer bei Tonsignal 
 				als Input)
-         - erweiterte Funktion: CW Übungsgenerator kann auch Q-Gruppen und übliche CW-Abkürzungen ausgeben
+        - erweiterte Funktion: CW Übungsgenerator kann auch Q-Gruppen und übliche CW-Abkürzungen ausgeben
 
 Um die Funktion des CW Dekoders zu verwenden, muss hardwareseitig ergänzt werden!
 
@@ -43,8 +43,9 @@ Um die Funktion des CW Dekoders zu verwenden, muss hardwareseitig ergänzt werde
   Ein Schaltungsvorschlag für den Verstärker wird in Kürze ebenfalls im Verzeichnis Hardware
   hinterlegt werden.
 
-ab V. 4.2 erweiterte Funktionen: a) Möglichkeit, auch im Betrieb als Übungsgenerator den Ausgang zu tasten
-				 b) Option, ACS (Automatic Character Spacing) beim CW Keyer zu verwenden
+ab V. 4.2 erweiterte Funktionen: 
+	a) Möglichkeit, auch im Betrieb als Übungsgenerator den Ausgang zu tasten
+	b) Option, ACS (Automatic Character Spacing) beim CW Keyer zu verwenden
 
 V. 4.3: Bugfix: im CW Trainer Mode wurden bei den 5er Gruppen gewisse Zeichen (zB "9" bei den Ziffern) nicht 
 		ausgegeben.
