@@ -55,7 +55,7 @@ V. 4.4: Beim Start wird der I2C Bus gescannt, und festgestellt, auf welcher Adre
 		(üblich sind welche mit Adresse 0x27 und 0x3f).
 
 V. 4.5: Es wurde ein Fehler behoben, der im Keyer-Modus falsches Timing in den Modi Iambic B und Iambic B+ zur 
-		Folge hatte. Vor allem B+ sollte jetzt deutlich besser funktionieren und jenen Zwisten, die auf
+		Folge hatte. Vor allem B+ sollte jetzt deutlich besser funktionieren und jenen CW-isten, die auf
 		den Iambic B Modus eingeschossen sind, weniger Probleme bereiten (der Modus B sollte eher nicht 
 		verwendet werden).
 
