@@ -1,15 +1,15 @@
 # In diesem Verzeichnis findet man die Unterlagen für den Arduino-basierten CW Keyer "metMorserino".
 
 Unterverzeichnisse:
-	- Arduino_Libraries: diese Bibliotheken müsen in der Arduino Entwicklungsumgebung
+- Arduino_Libraries: diese Bibliotheken müsen in der Arduino Entwicklungsumgebung
 	  vorhanden sein, damit fehlerfrei kompiliert werden kann. Es wurde derzeit die Arduino
 	  Entwicklungsumgebung Version 1.8.1 von arduino.cc verwendet.
-	- Driver_USB_Mac_PC: Damit der PC (oder Mac) mit dem Arduino Nano kommunizieren kann,
+- Driver_USB_Mac_PC: Damit der PC (oder Mac) mit dem Arduino Nano kommunizieren kann,
 	  muss ein passender Treiber installiert werden.
-	- Hardware: Schaltung und Aufbauanleitung für den Bausatz.
-	- Version_2: Arduino Software für Version 2 (CW Keyer + CW Trainer)
-	- Version_3: Arduino Software für Version 3 (CW Keyer + CW Trainer + CW Dekoder)
-	- Version_4: Arduino Software für Version 4 (Unterstützung externer Paddles, Erweiterungen)
+- Hardware: Schaltung und Aufbauanleitung für den Bausatz.
+- Version_2: Arduino Software für Version 2 (CW Keyer + CW Trainer)
+- Version_3: Arduino Software für Version 3 (CW Keyer + CW Trainer + CW Dekoder)
+- Version_4: Arduino Software für Version 4 (Unterstützung externer Paddles, Erweiterungen)
 
 ## Hardware – Versionshistorie:
 
@@ -24,13 +24,14 @@ Unterverzeichnisse:
 - Version 2: zusätzliche Funktion: CW Übungsgenerator m. 5er-Gruppen und Callsigns
 - Version 3: zusätzliche Funktion: CW Dekoder (Input entweder Tonsignal, oder Handtaste). Tonsignal-Input 
 	   erfordert Hardware-Erweiterung (NF Verstärker)
-- Version 4: zusätzliche Funktion: Möglichkeit, externes mechanisches Paddle anzuschließen anstelle der 
+- Version 4: 
+	- zusätzliche Funktion: Möglichkeit, externes mechanisches Paddle anzuschließen anstelle der 
 	                         Touch-Sensoren
-           erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
+         - erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
 			        Touchsensor (als Cootie / Sideswiper) verwendbar
-           erweiterte Funktion: Dekoder kann zum Tasten eines Senders verwendet werden (außer bei Tonsignal 
+         - erweiterte Funktion: Dekoder kann zum Tasten eines Senders verwendet werden (außer bei Tonsignal 
 				als Input)
-           erweiterte Funktion: CW Übungsgenerator kann auch Q-Gruppen und übliche CW-Abkürzungen ausgeben
+         - erweiterte Funktion: CW Übungsgenerator kann auch Q-Gruppen und übliche CW-Abkürzungen ausgeben
 
 Um die Funktion des CW Dekoders zu verwenden, muss hardwareseitig ergänzt werden!
 
@@ -79,6 +80,6 @@ V. 4.5: Es wurde ein Fehler behoben, der im Keyer-Modus falsches Timing in den M
 
 Ca. l. 33
 
-//#define KY_040_ENCODER
-//#define STANDARD_ENCODER
+	//#define KY_040_ENCODER
+	//#define STANDARD_ENCODER
   
