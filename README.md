@@ -1,4 +1,4 @@
-# In diesem Verzeichnis findet man die Unterlagen für den Arduino-basierten CW Keyer "metMorserino".
+# In diesem Verzeichnis findet man die Unterlagen für den Arduino-basierten CW Keyer "MetaMorserino".
 
 Unterverzeichnisse:
 - Arduino_Libraries: diese Bibliotheken müsen in der Arduino Entwicklungsumgebung
@@ -27,11 +27,11 @@ Unterverzeichnisse:
 - Version 4: 
 	- zusätzliche Funktion: Möglichkeit, externes mechanisches Paddle anzuschließen anstelle der 
 	                         Touch-Sensoren
-        - erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
+	- erweiterte Funktion: CW Dekoder nicht nur für „Straight Key“ oder Tonsignal, sondern auch mit 
 			        Touchsensor (als Cootie / Sideswiper) verwendbar
-        - erweiterte Funktion: Dekoder kann zum Tasten eines Senders verwendet werden (außer bei Tonsignal 
+	- erweiterte Funktion: Dekoder kann zum Tasten eines Senders verwendet werden (außer bei Tonsignal 
 				als Input)
-        - erweiterte Funktion: CW Übungsgenerator kann auch Q-Gruppen und übliche CW-Abkürzungen ausgeben
+	- erweiterte Funktion: CW Übungsgenerator kann auch Q-Gruppen und übliche CW-Abkürzungen ausgeben
 
 Um die Funktion des CW Dekoders zu verwenden, muss hardwareseitig ergänzt werden!
 
@@ -43,8 +43,8 @@ Um die Funktion des CW Dekoders zu verwenden, muss hardwareseitig ergänzt werde
   Ein Schaltungsvorschlag für den Verstärker wird in Kürze ebenfalls im Verzeichnis Hardware
   hinterlegt werden.
 
-ab V. 4.2 erweiterte Funktionen: 
-	a) Möglichkeit, auch im Betrieb als Übungsgenerator den Ausgang zu tasten
+ab V. 4.2 erweiterte Funktionen:   
+	a) Möglichkeit, auch im Betrieb als Übungsgenerator den Ausgang zu tasten  
 	b) Option, ACS (Automatic Character Spacing) beim CW Keyer zu verwenden
 
 V. 4.3: Bugfix: im CW Trainer Mode wurden bei den 5er Gruppen gewisse Zeichen (zB "9" bei den Ziffern) nicht 
@@ -60,7 +60,7 @@ V. 4.5: Es wurde ein Fehler behoben, der im Keyer-Modus falsches Timing in den M
 		verwendet werden).
 
 ## I M P O R T A N T ! !   W I C H T I G ! !  2. Serie Bausätze und Version 4!
-
+English:
   * There are 2 (two) versions of hardware, currently, the only difference affecting the code is the
     rotary encoder
   * older versions: uses the KY-040 encoder (recognazible as it is on a separate PCB
@@ -69,7 +69,8 @@ V. 4.5: Es wurde ein Fehler behoben, der im Keyer-Modus falsches Timing in den M
     throw an error ar you!
   * For this purpose, eliminate the '//' in front of one of the following lines in the source code! (at the 
     type that is being used)
-    
+
+Deutsch: 
   * Es gibt derzeit 2 (zwei) unterschiedliche Hardware Versionen, die sich vor allem im verwendeten 
     Roray Encoder unterscheiden
   * die ältere version: benutzt einen KY-040 Encoder - man erkennt ihn leicht daran, dass er auf einer 
